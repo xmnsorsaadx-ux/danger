@@ -5,7 +5,7 @@ stages:
   - test
 
 variables:
-  GITHUB_REPO_URL: "https://github.com/whiteout-project/bot.git"
+  GITHUB_REPO_URL: "https://github.com/xmnsorsaadx-ux/wos-danger.git"
   GIT_STRATEGY: none
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
 

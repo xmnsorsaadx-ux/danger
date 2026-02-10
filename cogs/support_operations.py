@@ -1,28 +1,30 @@
 import discord
 from discord.ext import commands
 from .pimp_my_bot import theme
+from i18n import get_guild_language, t
 
 class SupportOperations(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     async def show_support_menu(self, interaction: discord.Interaction):
+        lang = get_guild_language(interaction.guild.id if interaction.guild else None)
         support_menu_embed = discord.Embed(
-            title=f"{theme.targetIcon} Support Operations",
+            title=f"{theme.targetIcon} {t('support.menu.title', lang)}",
             description=(
-                f"Please select an operation:\n\n"
-                f"**Available Operations**\n"
+                f"{t('support.menu.prompt', lang)}\n\n"
+                f"**{t('support.menu.available', lang)}**\n"
                 f"{theme.upperDivider}\n"
-                f"{theme.editListIcon} **Request Support**\n"
-                f"└ Get help and support\n\n"
-                f"{theme.infoIcon} **About Project**\n"
-                f"└ Project information\n"
+                f"{theme.editListIcon} **{t('support.menu.request', lang)}**\n"
+                f"└ {t('support.menu.request_desc', lang)}\n\n"
+                f"{theme.infoIcon} **{t('support.menu.about', lang)}**\n"
+                f"└ {t('support.menu.about_desc', lang)}\n"
                 f"{theme.lowerDivider}"
             ),
             color=theme.emColor1
         )
 
-        view = SupportView(self)
+        view = SupportView(self, lang)
         
         try:
             await interaction.response.edit_message(embed=support_menu_embed, view=view)
@@ -30,20 +32,10 @@ class SupportOperations(commands.Cog):
             await interaction.message.edit(embed=support_menu_embed, view=view)
 
     async def show_support_info(self, interaction: discord.Interaction):
+        lang = get_guild_language(interaction.guild.id if interaction.guild else None)
         support_embed = discord.Embed(
-            title=f"{theme.robotIcon} Bot Support Information",
-            description=(
-                "If you need help with the bot or are experiencing any issues, "
-                "please feel free to ask on our [Discord](https://discord.gg/apYByj6K2m)\n\n"
-                "**Additional resources:**\n"
-                "**GitHub Repository:** [Whiteout Project](https://github.com/whiteout-project/bot)\n"
-                "**Issues & Bug Reports:** [GitHub Issues](https://github.com/whiteout-project/bot/issues)\n\n"
-                "This bot is open source and maintained by the WOSLand community. "
-                "You can report bugs, request features, or contribute to the project "
-                "through our Discord or GitHub repository.\n\n"
-                "For technical support, please make sure to provide "
-                "detailed information about your problem."
-            ),
+            title=f"{theme.robotIcon} {t('support.info.title', lang)}",
+            description=t('support.info.body', lang),
             color=theme.emColor1
         )
         
@@ -60,9 +52,17 @@ class SupportOperations(commands.Cog):
             print(f"Error sending support info: {e}")
 
 class SupportView(discord.ui.View):
-    def __init__(self, cog):
+    def __init__(self, cog, lang: str):
         super().__init__()
         self.cog = cog
+        for item in self.children:
+            if isinstance(item, discord.ui.Button):
+                if item.custom_id == "request_support":
+                    item.label = t("support.menu.request", lang)
+                elif item.custom_id == "about_project":
+                    item.label = t("support.menu.about", lang)
+                elif item.custom_id == "main_menu":
+                    item.label = t("button.main_menu", lang)
 
     @discord.ui.button(
         label="Request Support",
@@ -80,16 +80,14 @@ class SupportView(discord.ui.View):
         custom_id="about_project"
     )
     async def about_project_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        lang = get_guild_language(interaction.guild.id if interaction.guild else None)
         about_embed = discord.Embed(
-            title=f"{theme.infoIcon} About Whiteout Project",
+            title=f"{theme.infoIcon} {t('support.about.title', lang)}",
             description=(
-                f"**Open Source Bot**\n"
+                f"**{t('support.about.open_source', lang)}**\n"
                 f"{theme.upperDivider}\n"
-                f"This is an open source Discord bot for Whiteout Survival.\n"
-                f"The project is community-driven and freely available for everyone.\n"
-                f"**Repository:** [GitHub](https://github.com/whiteout-project/bot)\n"
-                f"**Community:** [Discord](https://discord.gg/apYByj6K2m)\n\n"
-                f"**Features**\n"
+                f"{t('support.about.body', lang)}\n\n"
+                f"**{t('support.about.features', lang)}**\n"
                 f"{theme.middleDivider}\n"
                 f"• Alliance member management\n"
                 f"• Gift code operations\n"
@@ -97,15 +95,14 @@ class SupportView(discord.ui.View):
                 f"• Bear trap notifications\n"
                 f"• ID channel verification\n"
                 f"• and more...\n\n"
-                f"**Contributing**\n"
+                f"**{t('support.about.contributing', lang)}**\n"
                 f"{theme.middleDivider}\n"
-                f"Contributions are welcome! Please check our GitHub repository "
-                f"to report issues, suggest features, or submit pull requests."
+                f"{t('support.about.contributing_body', lang)}"
             ),
             color=discord.Color.green()
         )
 
-        about_embed.set_footer(text=f"Made with {theme.heartIcon} by the WOSLand Bot Team.")
+        about_embed.set_footer(text=t("support.about.footer", lang, heart=theme.heartIcon))
         
         try:
             await interaction.response.send_message(embed=about_embed, ephemeral=True)

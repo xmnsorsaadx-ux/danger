@@ -1,11 +1,11 @@
-# Whiteout Survival Discord Bot
+# DANGER Bot
 
-Whiteout Survival Discord Bot that supports alliance management, event reminders and attendance tracking, gift code redemption, minister appointment planning and more. This bot is free, open source and self-hosted.
+DANGER is a self-hosted Discord bot for Whiteout Survival. It supports alliance management, event reminders and attendance tracking, gift code redemption, minister appointment planning, and more.
 
-**This is the actively maintained and improved version of the original bot that was created and soon abandoned by Reloisback.**
+## Getting Started
 
-## 🚀 Getting Started
+Follow the setup steps in this repository to configure your bot token, database folder, and runtime environment.
 
-To get started with the bot, head over to the [wiki](https://github.com/whiteout-project/bot/wiki) for instructions and other information.
+## Attribution
 
-If you have any issues with the bot, head over to the [common issues](https://github.com/whiteout-project/bot/wiki/Common-Issues) page or join our [discord server](https://discord.gg/apYByj6K2m) for support.
+This project is a derivative of the original Whiteout Survival Discord Bot by Reloisback. The original license terms are preserved in [LICENSE](LICENSE).

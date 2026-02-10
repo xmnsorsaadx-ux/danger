@@ -1,6 +1,6 @@
 #!/bin/sh
 
-echo "[WSDB] for more information please see https://github.com/whiteout-project/bot"
+echo "[WSDB] for more information please see https://github.com/xmnsorsaadx-ux/wos-danger"
 
 cd /app
 

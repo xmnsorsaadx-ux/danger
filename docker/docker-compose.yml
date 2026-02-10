@@ -1,7 +1,7 @@
 services:
-  wos-discord-bot:
-    image: ghcr.io/whiteout-project/bot:latest
-    container_name: wos-discord-bot
+  wos-danger-bot:
+    image: ghcr.io/xmnsorsaadx-ux/wos-danger:latest
+    container_name: wos-danger-bot
     volumes:
       - /opt/docker/wos/db/:/app/db
     restart: unless-stopped

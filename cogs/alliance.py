@@ -6,6 +6,7 @@ import asyncio
 from datetime import datetime
 from .permission_handler import PermissionManager
 from .pimp_my_bot import theme
+from i18n import get_guild_language, t
 
 class Alliance(commands.Cog):
     def __init__(self, bot, conn):
@@ -165,26 +166,28 @@ class Alliance(commands.Cog):
                 )
                 return
 
+            lang = get_guild_language(interaction.guild.id if interaction.guild else None)
+
             embed = discord.Embed(
-                title=f"{theme.settingsIcon} Settings Menu",
+                title=f"{theme.settingsIcon} {t('menu.settings.title', lang)}",
                 description=(
-                    f"Please select a category:\n\n"
-                    f"**Menu Categories**\n"
+                    f"{t('menu.settings.prompt', lang)}\n\n"
+                    f"**{t('menu.settings.categories', lang)}**\n"
                     f"{theme.upperDivider}\n"
-                    f"{theme.allianceIcon} **Alliance Operations**\n"
-                    f"└ Manage alliances and settings\n\n"
-                    f"{theme.membersIcon} **Alliance Member Operations**\n"
-                    f"└ Add, remove, and view members\n\n"
-                    f"{theme.robotIcon} **Bot Operations**\n"
-                    f"└ Configure bot settings\n\n"
-                    f"{theme.giftIcon} **Gift Code Operations**\n"
-                    f"└ Manage gift codes and rewards\n\n"
-                    f"{theme.listIcon} **Alliance History**\n"
-                    f"└ View alliance changes and history\n\n"
-                    f"{theme.supportIcon} **Support Operations**\n"
-                    f"└ Access support features\n\n"
-                    f"{theme.paletteIcon} **Theme Settings**\n"
-                    f"└ Customize bot icons and colors\n"
+                    f"{theme.allianceIcon} **{t('menu.settings.alliance_ops', lang)}**\n"
+                    f"└ {t('menu.settings.alliance_ops_desc', lang)}\n\n"
+                    f"{theme.membersIcon} **{t('menu.settings.member_ops', lang)}**\n"
+                    f"└ {t('menu.settings.member_ops_desc', lang)}\n\n"
+                    f"{theme.robotIcon} **{t('menu.settings.bot_ops', lang)}**\n"
+                    f"└ {t('menu.settings.bot_ops_desc', lang)}\n\n"
+                    f"{theme.giftIcon} **{t('menu.settings.gift_ops', lang)}**\n"
+                    f"└ {t('menu.settings.gift_ops_desc', lang)}\n\n"
+                    f"{theme.listIcon} **{t('menu.settings.history', lang)}**\n"
+                    f"└ {t('menu.settings.history_desc', lang)}\n\n"
+                    f"{theme.supportIcon} **{t('menu.settings.support', lang)}**\n"
+                    f"└ {t('menu.settings.support_desc', lang)}\n\n"
+                    f"{theme.paletteIcon} **{t('menu.settings.theme', lang)}**\n"
+                    f"└ {t('menu.settings.theme_desc', lang)}\n"
                     f"{theme.lowerDivider}"
                 ),
                 color=theme.emColor1
@@ -192,56 +195,56 @@ class Alliance(commands.Cog):
 
             view = discord.ui.View()
             view.add_item(discord.ui.Button(
-                label="Alliance Operations",
+                label=t("menu.settings.alliance_ops", lang),
                 emoji=theme.allianceIcon,
                 style=discord.ButtonStyle.primary,
                 custom_id="alliance_operations",
                 row=0
             ))
             view.add_item(discord.ui.Button(
-                label="Member Operations",
+                label=t("menu.settings.member_ops", lang),
                 emoji=theme.membersIcon,
                 style=discord.ButtonStyle.primary,
                 custom_id="member_operations",
                 row=0
             ))
             view.add_item(discord.ui.Button(
-                label="Bot Operations",
+                label=t("menu.settings.bot_ops", lang),
                 emoji=theme.robotIcon,
                 style=discord.ButtonStyle.primary,
                 custom_id="bot_operations",
                 row=1
             ))
             view.add_item(discord.ui.Button(
-                label="Gift Operations",
+                label=t("menu.settings.gift_ops", lang),
                 emoji=theme.giftIcon,
                 style=discord.ButtonStyle.primary,
                 custom_id="gift_code_operations",
                 row=1
             ))
             view.add_item(discord.ui.Button(
-                label="Alliance History",
+                label=t("menu.settings.history", lang),
                 emoji=theme.listIcon,
                 style=discord.ButtonStyle.primary,
                 custom_id="alliance_history",
                 row=2
             ))
             view.add_item(discord.ui.Button(
-                label="Support Operations",
+                label=t("menu.settings.support", lang),
                 emoji=theme.supportIcon,
                 style=discord.ButtonStyle.primary,
                 custom_id="support_operations",
                 row=2
             ))
             view.add_item(discord.ui.Button(
-                label="Other Features",
+                label=t("menu.settings.other", lang),
                 emoji=theme.settingsIcon,
                 style=discord.ButtonStyle.primary,
                 custom_id="other_features",
                 row=3
             ))
             view.add_item(discord.ui.Button(
-                label="Theme Settings",
+                label=t("menu.settings.theme", lang),
                 emoji=f"{theme.paletteIcon}",
                 style=discord.ButtonStyle.primary,
                 custom_id="theme_settings",
@@ -265,26 +268,28 @@ class Alliance(commands.Cog):
     async def show_main_menu(self, interaction: discord.Interaction):
         """Display the main settings menu - can be called by other cogs"""
         try:
+            lang = get_guild_language(interaction.guild.id if interaction.guild else None)
+
             embed = discord.Embed(
-                title=f"{theme.settingsIcon} Settings Menu",
+                title=f"{theme.settingsIcon} {t('menu.settings.title', lang)}",
                 description=(
-                    f"Please select a category:\n\n"
-                    f"**Menu Categories**\n"
+                    f"{t('menu.settings.prompt', lang)}\n\n"
+                    f"**{t('menu.settings.categories', lang)}**\n"
                     f"{theme.upperDivider}\n"
-                    f"{theme.allianceIcon} **Alliance Operations**\n"
-                    f"└ Manage alliances and settings\n\n"
-                    f"{theme.membersIcon} **Alliance Member Operations**\n"
-                    f"└ Add, remove, and view members\n\n"
-                    f"{theme.robotIcon} **Bot Operations**\n"
-                    f"└ Configure bot settings\n\n"
-                    f"{theme.giftIcon} **Gift Code Operations**\n"
-                    f"└ Manage gift codes and rewards\n\n"
-                    f"{theme.listIcon} **Alliance History**\n"
-                    f"└ View alliance changes and history\n\n"
-                    f"{theme.supportIcon} **Support Operations**\n"
-                    f"└ Access support features\n\n"
-                    f"{theme.paletteIcon} **Theme Settings**\n"
-                    f"└ Customize bot icons and colors\n"
+                    f"{theme.allianceIcon} **{t('menu.settings.alliance_ops', lang)}**\n"
+                    f"└ {t('menu.settings.alliance_ops_desc', lang)}\n\n"
+                    f"{theme.membersIcon} **{t('menu.settings.member_ops', lang)}**\n"
+                    f"└ {t('menu.settings.member_ops_desc', lang)}\n\n"
+                    f"{theme.robotIcon} **{t('menu.settings.bot_ops', lang)}**\n"
+                    f"└ {t('menu.settings.bot_ops_desc', lang)}\n\n"
+                    f"{theme.giftIcon} **{t('menu.settings.gift_ops', lang)}**\n"
+                    f"└ {t('menu.settings.gift_ops_desc', lang)}\n\n"
+                    f"{theme.listIcon} **{t('menu.settings.history', lang)}**\n"
+                    f"└ {t('menu.settings.history_desc', lang)}\n\n"
+                    f"{theme.supportIcon} **{t('menu.settings.support', lang)}**\n"
+                    f"└ {t('menu.settings.support_desc', lang)}\n\n"
+                    f"{theme.paletteIcon} **{t('menu.settings.theme', lang)}**\n"
+                    f"└ {t('menu.settings.theme_desc', lang)}\n"
                     f"{theme.lowerDivider}"
                 ),
                 color=theme.emColor1
@@ -292,56 +297,56 @@ class Alliance(commands.Cog):
 
             view = discord.ui.View()
             view.add_item(discord.ui.Button(
-                label="Alliance Operations",
+                label=t("menu.settings.alliance_ops", lang),
                 emoji=theme.allianceIcon,
                 style=discord.ButtonStyle.primary,
                 custom_id="alliance_operations",
                 row=0
             ))
             view.add_item(discord.ui.Button(
-                label="Member Operations",
+                label=t("menu.settings.member_ops", lang),
                 emoji=theme.membersIcon,
                 style=discord.ButtonStyle.primary,
                 custom_id="member_operations",
                 row=0
             ))
             view.add_item(discord.ui.Button(
-                label="Bot Operations",
+                label=t("menu.settings.bot_ops", lang),
                 emoji=theme.robotIcon,
                 style=discord.ButtonStyle.primary,
                 custom_id="bot_operations",
                 row=1
             ))
             view.add_item(discord.ui.Button(
-                label="Gift Operations",
+                label=t("menu.settings.gift_ops", lang),
                 emoji=theme.giftIcon,
                 style=discord.ButtonStyle.primary,
                 custom_id="gift_code_operations",
                 row=1
             ))
             view.add_item(discord.ui.Button(
-                label="Alliance History",
+                label=t("menu.settings.history", lang),
                 emoji=theme.listIcon,
                 style=discord.ButtonStyle.primary,
                 custom_id="alliance_history",
                 row=2
             ))
             view.add_item(discord.ui.Button(
-                label="Support Operations",
+                label=t("menu.settings.support", lang),
                 emoji=theme.supportIcon,
                 style=discord.ButtonStyle.primary,
                 custom_id="support_operations",
                 row=2
             ))
             view.add_item(discord.ui.Button(
-                label="Other Features",
+                label=t("menu.settings.other", lang),
                 emoji=theme.settingsIcon,
                 style=discord.ButtonStyle.primary,
                 custom_id="other_features",
                 row=3
             ))
             view.add_item(discord.ui.Button(
-                label="Theme Settings",
+                label=t("menu.settings.theme", lang),
                 emoji=f"{theme.paletteIcon}",
                 style=discord.ButtonStyle.primary,
                 custom_id="theme_settings",

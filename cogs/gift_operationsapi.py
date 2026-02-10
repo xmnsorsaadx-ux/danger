@@ -1,4 +1,5 @@
 import json
+import os
 import aiohttp
 import asyncio
 import sqlite3
@@ -15,8 +16,8 @@ logger = logging.getLogger("gift_operationsapi")
 class GiftCodeAPI:
     def __init__(self, bot):
         self.bot = bot
-        self.api_url = "http://gift-code-api.whiteout-bot.com/giftcode_api.php"
-        self.api_key = "super_secret_bot_token_nobody_will_ever_find"
+        self.api_url = os.getenv("GIFT_API_URL", "").strip()
+        self.api_key = os.getenv("GIFT_API_KEY", "").strip()
         
         # Random 5-10min check interval to help reduce API load
         self.min_check_interval = 300
@@ -57,7 +58,10 @@ class GiftCodeAPI:
         
         self.logger = logging.getLogger("gift_operationsapi")
         
-        asyncio.create_task(self.start_api_check())
+        if self.api_url and self.api_key:
+            asyncio.create_task(self.start_api_check())
+        else:
+            self.logger.warning("Gift code API is not configured. Set GIFT_API_URL and GIFT_API_KEY to enable it.")
 
     async def _execute_with_retry(self, operation, *args, max_retries=3, delay=0.1):
         """Execute a database operation with retry logic for handling locks."""
@@ -82,6 +86,8 @@ class GiftCodeAPI:
 
     async def start_api_check(self):
         """Start periodic API synchronization with exponential backoff on failures."""
+        if not self.api_url or not self.api_key:
+            return
         try:
             await asyncio.sleep(60)
             

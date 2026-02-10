@@ -7,6 +7,7 @@ import requests
 from .alliance_member_operations import AllianceSelectView
 from .permission_handler import PermissionManager
 from .pimp_my_bot import theme
+from i18n import get_guild_language, set_guild_language, t
 
 class BotOperations(commands.Cog):
     def __init__(self, bot, conn):
@@ -168,6 +169,12 @@ class BotOperations(commands.Cog):
                         f"{theme.deniedIcon} An error occurred while opening control settings.",
                         ephemeral=True
                     )
+
+        elif custom_id == "language_settings":
+            await self.show_language_settings(interaction)
+
+        elif custom_id in ["language_set_en", "language_set_ar", "bot_ops_menu"]:
+            await self.handle_language_action(interaction, custom_id)
                     
         elif custom_id in ["assign_alliance", "add_admin", "remove_admin", "main_menu", "bot_status", "bot_settings"]:
             try:
@@ -1121,10 +1128,10 @@ class BotOperations(commands.Cog):
                     main_embed.add_field(
                         name="How to Update",
                         value=(
-                            f"To update to the new version:\n"
-                            f"{theme.refreshIcon} **Restart the bot** (main.py)\n"
+                            "To update to the new version:\n"
+                            f"{theme.refreshIcon} **Restart the bot** with `--check-update` or `--autoupdate`\n"
                             f"{theme.verifiedIcon} Accept the update when prompted\n\n"
-                            f"The bot will automatically download and install the update."
+                            "The bot will download and install the update."
                         ),
                         inline=False
                     )
@@ -1154,20 +1161,24 @@ class BotOperations(commands.Cog):
             # Check if user is global admin
             _, is_global = PermissionManager.is_admin(interaction.user.id)
 
+            lang = get_guild_language(interaction.guild.id if interaction.guild else None)
+
             embed = discord.Embed(
-                title="🤖 Bot Operations",
+                title=f"{theme.robotIcon} {t('bot.ops.title', lang)}",
                 description=(
-                    f"Please choose an operation:\n\n"
-                    f"**Available Operations**\n"
+                    f"{t('bot.ops.prompt', lang)}\n\n"
+                    f"**{t('bot.ops.available', lang)}**\n"
                     f"{theme.upperDivider}\n"
-                    f"{theme.membersIcon} **Admin Management**\n"
-                    f"└ Manage bot administrators\n\n"
-                    f"{theme.searchIcon} **Admin Permissions**\n"
-                    f"└ View and manage admin permissions\n\n"
-                    f"{theme.settingsIcon} **Control Settings**\n"
-                    f"└ Configure alliance control behaviors\n\n"
-                    f"{theme.refreshIcon} **Bot Updates**\n"
-                    f"└ Check and manage updates\n"
+                    f"{theme.membersIcon} **{t('bot.ops.admin_mgmt', lang)}**\n"
+                    f"└ {t('bot.ops.admin_mgmt_desc', lang)}\n\n"
+                    f"{theme.searchIcon} **{t('bot.ops.admin_perms', lang)}**\n"
+                    f"└ {t('bot.ops.admin_perms_desc', lang)}\n\n"
+                    f"{theme.settingsIcon} **{t('bot.ops.control_settings', lang)}**\n"
+                    f"└ {t('bot.ops.control_settings_desc', lang)}\n\n"
+                    f"{theme.refreshIcon} **{t('bot.ops.updates', lang)}**\n"
+                    f"└ {t('bot.ops.updates_desc', lang)}\n\n"
+                    f"{theme.globeIcon} **{t('bot.ops.language', lang)}**\n"
+                    f"└ {t('bot.ops.language_desc', lang)}\n"
                     f"{theme.lowerDivider}"
                 ),
                 color=theme.emColor1
@@ -1176,7 +1187,7 @@ class BotOperations(commands.Cog):
             # Global admin only buttons are disabled for server admins
             view = discord.ui.View()
             view.add_item(discord.ui.Button(
-                label="Add Admin",
+                label=t("button.add_admin", lang),
                 emoji=f"{theme.addIcon}",
                 style=discord.ButtonStyle.success,
                 custom_id="add_admin",
@@ -1184,7 +1195,7 @@ class BotOperations(commands.Cog):
                 disabled=not is_global
             ))
             view.add_item(discord.ui.Button(
-                label="Remove Admin",
+                label=t("button.remove_admin", lang),
                 emoji=f"{theme.minusIcon}",
                 style=discord.ButtonStyle.danger,
                 custom_id="remove_admin",
@@ -1192,7 +1203,7 @@ class BotOperations(commands.Cog):
                 disabled=not is_global
             ))
             view.add_item(discord.ui.Button(
-                label="View Administrators",
+                label=t("button.view_admins", lang),
                 emoji=f"{theme.membersIcon}",
                 style=discord.ButtonStyle.primary,
                 custom_id="view_administrators",
@@ -1200,7 +1211,7 @@ class BotOperations(commands.Cog):
                 disabled=not is_global
             ))
             view.add_item(discord.ui.Button(
-                label="Assign Alliance to Admin",
+                label=t("button.assign_alliance", lang),
                 emoji=f"{theme.linkIcon}",
                 style=discord.ButtonStyle.success,
                 custom_id="assign_alliance",
@@ -1208,7 +1219,7 @@ class BotOperations(commands.Cog):
                 disabled=not is_global
             ))
             view.add_item(discord.ui.Button(
-                label="Delete Admin Permissions",
+                label=t("button.delete_admin_permissions", lang),
                 emoji=f"{theme.minusIcon}",
                 style=discord.ButtonStyle.danger,
                 custom_id="view_admin_permissions",
@@ -1216,7 +1227,7 @@ class BotOperations(commands.Cog):
                 disabled=not is_global
             ))
             view.add_item(discord.ui.Button(
-                label="Transfer Old Database",
+                label=t("button.transfer_old_db", lang),
                 emoji=f"{theme.refreshIcon}",
                 style=discord.ButtonStyle.primary,
                 custom_id="transfer_old_database",
@@ -1224,7 +1235,7 @@ class BotOperations(commands.Cog):
                 disabled=not is_global
             ))
             view.add_item(discord.ui.Button(
-                label="Check for Updates",
+                label=t("button.check_updates", lang),
                 emoji=f"{theme.refreshIcon}",
                 style=discord.ButtonStyle.primary,
                 custom_id="check_updates",
@@ -1233,14 +1244,14 @@ class BotOperations(commands.Cog):
             ))
             # These are available to all admins (scoped to their alliances)
             view.add_item(discord.ui.Button(
-                label="Log System",
+                label=t("button.log_system", lang),
                 emoji=f"{theme.listIcon}",
                 style=discord.ButtonStyle.primary,
                 custom_id="log_system",
                 row=3
             ))
             view.add_item(discord.ui.Button(
-                label="Alliance Control Messages",
+                label=t("button.alliance_control_messages", lang),
                 emoji=f"{theme.chatIcon}",
                 style=discord.ButtonStyle.primary,
                 custom_id="alliance_control_messages",
@@ -1248,17 +1259,24 @@ class BotOperations(commands.Cog):
                 disabled=not is_global
             ))
             view.add_item(discord.ui.Button(
-                label="Control Settings",
+                label=t("button.control_settings", lang),
                 emoji=f"{theme.settingsIcon}",
                 style=discord.ButtonStyle.primary,
                 custom_id="control_settings",
                 row=4
             ))
             view.add_item(discord.ui.Button(
-                label="Main Menu",
+                label=t("button.main_menu", lang),
                 emoji=f"{theme.homeIcon}",
                 style=discord.ButtonStyle.secondary,
                 custom_id="main_menu",
+                row=4
+            ))
+            view.add_item(discord.ui.Button(
+                label=t("bot.ops.language", lang),
+                emoji=f"{theme.globeIcon}",
+                style=discord.ButtonStyle.primary,
+                custom_id="language_settings",
                 row=4
             ))
 
@@ -1272,6 +1290,81 @@ class BotOperations(commands.Cog):
                     f"{theme.deniedIcon} An error occurred while showing the menu.",
                     ephemeral=True
                 )
+
+    def _build_language_settings_view(self, lang: str):
+        current_label = t("language.english", lang) if lang == "en" else t("language.arabic", lang)
+        description = (
+            f"{t('language.settings.description', lang)}\n"
+            f"{t('language.current', lang, language=current_label)}"
+        )
+
+        embed = discord.Embed(
+            title=f"{theme.globeIcon} {t('language.settings.title', lang)}",
+            description=description,
+            color=theme.emColor1,
+        )
+
+        view = discord.ui.View()
+        view.add_item(
+            discord.ui.Button(
+                label=t("language.english", lang),
+                style=discord.ButtonStyle.primary,
+                custom_id="language_set_en",
+            )
+        )
+        view.add_item(
+            discord.ui.Button(
+                label=t("language.arabic", lang),
+                style=discord.ButtonStyle.primary,
+                custom_id="language_set_ar",
+            )
+        )
+        view.add_item(
+            discord.ui.Button(
+                label=t("language.back", lang),
+                style=discord.ButtonStyle.secondary,
+                custom_id="bot_ops_menu",
+            )
+        )
+
+        return embed, view
+
+    async def show_language_settings(self, interaction: discord.Interaction):
+        if interaction.guild is None:
+            lang = get_guild_language(None)
+            await interaction.response.send_message(
+                t("language.guild_required", lang),
+                ephemeral=True,
+            )
+            return
+
+        lang = get_guild_language(interaction.guild.id)
+        embed, view = self._build_language_settings_view(lang)
+
+        try:
+            await interaction.response.edit_message(embed=embed, view=view)
+        except discord.InteractionResponded:
+            await interaction.message.edit(embed=embed, view=view)
+
+    async def handle_language_action(self, interaction: discord.Interaction, custom_id: str):
+        if custom_id == "bot_ops_menu":
+            await self.show_bot_operations_menu(interaction)
+            return
+
+        if interaction.guild is None:
+            lang = get_guild_language(None)
+            await interaction.response.send_message(
+                t("language.guild_required", lang),
+                ephemeral=True,
+            )
+            return
+
+        selected = "en" if custom_id == "language_set_en" else "ar"
+        set_guild_language(interaction.guild.id, selected)
+        lang = get_guild_language(interaction.guild.id)
+        embed, view = self._build_language_settings_view(lang)
+
+        await interaction.response.edit_message(embed=embed, view=view)
 
     async def confirm_permission_removal(self, admin_id: int, alliance_id: int, confirm_interaction: discord.Interaction):
         try:
@@ -1287,7 +1380,7 @@ class BotOperations(commands.Cog):
     async def check_for_updates(self):
         """Check for updates using GitHub releases API"""
         try:
-            latest_release_url = "https://api.github.com/repos/whiteout-project/bot/releases/latest"
+            latest_release_url = "https://api.github.com/repos/xmnsorsaadx-ux/wos-danger/releases/latest"
             
             response = requests.get(latest_release_url, timeout=10)
             if response.status_code != 200:

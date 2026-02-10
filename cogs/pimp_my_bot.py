@@ -409,7 +409,7 @@ class ThemeManager:
                         emColorString1, emColorString2, emColorString3, emColorString4,
                         headerColor1, headerColor2
                     ) VALUES (
-                        'default', '@WOSLand', 1,
+                        'default', '@DANGER', 1,
                         '⚔️', '👤', '🔥', '🌏',
                         '⚔️', '👤', '🔥', '🌏',
                         '📜', '🆔', '🕰️', '🏠',

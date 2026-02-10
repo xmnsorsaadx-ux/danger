@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import sqlite3
 from .pimp_my_bot import theme
+from i18n import get_guild_language, t
 
 class GNCommands(commands.Cog):
     def __init__(self, bot):
@@ -27,6 +28,8 @@ class GNCommands(commands.Cog):
                 admin_user = await self.bot.fetch_user(admin_id)
                 
                 if admin_user:
+                    guild_id = self.bot.guilds[0].id if self.bot.guilds else None
+                    lang = get_guild_language(guild_id)
                     cursor.execute("SELECT value FROM auto LIMIT 1")
                     auto_result = cursor.fetchone()
                     auto_value = auto_result[0] if auto_result else 1
@@ -48,14 +51,14 @@ class GNCommands(commands.Cog):
                         ocr_details = f"Error checking OCR: {str(e)[:30]}..."
                     
                     status_embed = discord.Embed(
-                        title=f"{theme.robotIcon} Bot Successfully Activated",
+                        title=f"{theme.robotIcon} {t('welcome.title', lang)}",
                         description=(
                             f"{theme.upperDivider}\n"
-                            f"**System Status**\n"
-                            f"{theme.verifiedIcon} Bot is now online and operational\n"
-                            f"{theme.verifiedIcon} Database connections established\n"
-                            f"{theme.verifiedIcon} Command systems initialized\n"
-                            f"{theme.verifiedIcon if auto_value == 1 else theme.deniedIcon} Alliance Control Messages\n"
+                            f"**{t('welcome.system_status', lang)}**\n"
+                            f"{theme.verifiedIcon} {t('welcome.online', lang)}\n"
+                            f"{theme.verifiedIcon} {t('welcome.db', lang)}\n"
+                            f"{theme.verifiedIcon} {t('welcome.commands', lang)}\n"
+                            f"{theme.verifiedIcon if auto_value == 1 else theme.deniedIcon} {t('welcome.control_msgs', lang)}\n"
                             f"{ocr_status} {ocr_details}\n"
                             f"{theme.middleDivider}\n"
                         ),
@@ -63,17 +66,12 @@ class GNCommands(commands.Cog):
                     )
 
                     status_embed.add_field(
-                        name=f"{theme.pinIcon} Community & Support",
-                        value=(
-                            f"**GitHub Repository:** [Whiteout Project](https://github.com/whiteout-project/bot)\n"
-                            f"**Discord Community:** [Join our Discord](https://discord.gg/apYByj6K2m)\n"
-                            f"**Bug Reports:** [GitHub Issues](https://github.com/whiteout-project/bot/issues)\n"
-                            f"{theme.lowerDivider}"
-                        ),
+                        name=f"{theme.pinIcon} {t('welcome.community_title', lang)}",
+                        value=f"{t('welcome.community_body', lang)}\n{theme.lowerDivider}",
                         inline=False
                     )
 
-                    status_embed.set_footer(text="Thanks for using the bot! Maintained with ❤️ by the WOSLand Bot Team.")
+                    status_embed.set_footer(text=t("welcome.footer", lang))
 
                     await admin_user.send(embed=status_embed)
 

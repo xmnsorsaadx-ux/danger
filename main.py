@@ -345,14 +345,8 @@ def is_package_installed(package_name):
 UPDATE_SOURCES = [
     {
         "name": "GitHub",
-        "api_url": "https://api.github.com/repos/whiteout-project/bot/releases/latest",
+        "api_url": "https://api.github.com/repos/xmnsorsaadx-ux/wos-danger/releases/latest",
         "primary": True
-    },
-    {
-        "name": "GitLab",
-        "api_url": "https://gitlab.whiteout-bot.com/api/v4/projects/1/releases",
-        "project_id": 1,
-        "primary": False
     }
     # Can add more sources here as needed
 ]
@@ -392,22 +386,6 @@ def get_latest_release_info(beta_mode=False):
                             "source": source['name']
                         }
                     
-            elif source['name'] == "GitLab":
-                response = requests.get(source['api_url'], timeout=30)
-                if response.status_code == 200:
-                    releases = response.json()
-                    if releases:
-                        latest = releases[0]  # GitLab returns array, first is latest
-                        tag_name = latest['tag_name']
-                        # Use GitLab's source archive
-                        download_url = f"https://gitlab.whiteout-bot.com/whiteout-project/bot/-/archive/{tag_name}/bot-{tag_name}.zip"
-                        return {
-                            "tag_name": tag_name,
-                            "body": latest.get("description", "No release notes available"),
-                            "download_url": download_url,
-                            "source": source['name']
-                        }
-            
             # Add handling for other sources here
             
         except requests.exceptions.RequestException as e:
@@ -449,14 +427,9 @@ def download_requirements_from_release(beta_mode=False):
     # Build raw URL based on source and mode
     if source_name == "GitHub" or "GitHub" in source_name:
         if beta_mode:
-            raw_url = "https://raw.githubusercontent.com/whiteout-project/bot/main/requirements.txt"
+            raw_url = "https://raw.githubusercontent.com/xmnsorsaadx-ux/wos-danger/main/requirements.txt"
         else:
-            raw_url = f"https://raw.githubusercontent.com/whiteout-project/bot/refs/tags/{tag}/requirements.txt"
-    elif source_name == "GitLab":
-        if beta_mode:
-            raw_url = "https://gitlab.whiteout-bot.com/whiteout-project/bot/-/raw/main/requirements.txt"
-        else:
-            raw_url = f"https://gitlab.whiteout-bot.com/whiteout-project/bot/-/raw/{tag}/requirements.txt"
+            raw_url = f"https://raw.githubusercontent.com/xmnsorsaadx-ux/wos-danger/refs/tags/{tag}/requirements.txt"
     else:
         print(f"Unknown source: {source_name}")
         return False
@@ -620,7 +593,7 @@ def setup_dependencies(beta_mode=False):
             print("! Warning: requirements.txt not found")
         if not download_requirements_from_release(beta_mode=beta_mode):
             print("✗ Failed to download requirements.txt")
-            print("• Please download the complete bot package from: https://github.com/whiteout-project/bot/releases")
+            print("• Please download the complete bot package from: https://github.com/xmnsorsaadx-ux/wos-danger/releases")
             return False
     
     if not check_and_install_requirements():
@@ -742,12 +715,13 @@ if __name__ == "__main__":
     import requests
 
     # Check for mutually exclusive flags
-    mutually_exclusive_flags = ["--autoupdate", "--no-update", "--repair"]
+    mutually_exclusive_flags = ["--autoupdate", "--no-update", "--repair", "--check-update"]
     active_flags = [flag for flag in mutually_exclusive_flags if flag in sys.argv]
     
     if len(active_flags) > 1:
         print(F.RED + f"Error: {' and '.join(active_flags)} flags are mutually exclusive." + R)
         print("Use --autoupdate to automatically install updates without prompting.")
+        print("Use --check-update to check for updates without forcing auto-install.")
         print("Use --no-update to skip all update checks.")
         print("Use --repair to force reinstall/repair missing or corrupted files.")
         sys.exit(1)
@@ -1020,10 +994,12 @@ if __name__ == "__main__":
     # Handle update/repair logic
     if "--repair" in sys.argv:
         asyncio.run(check_and_update_files())
+    elif "--autoupdate" in sys.argv or "--check-update" in sys.argv:
+        asyncio.run(check_and_update_files())
     elif "--no-update" in sys.argv:
         print(F.YELLOW + "Update check skipped due to --no-update flag." + R)
     else:
-        asyncio.run(check_and_update_files())
+        print(F.YELLOW + "Update check skipped by default. Use --check-update or --autoupdate to enable." + R)
             
     import discord
     from discord.ext import commands
@@ -1106,6 +1082,11 @@ if __name__ == "__main__":
                 is_initial INTEGER
             )""")
 
+            conn_settings.execute("""CREATE TABLE IF NOT EXISTS language_settings (
+                guild_id INTEGER PRIMARY KEY,
+                language TEXT NOT NULL DEFAULT 'en'
+            )""")
+
         with connections["conn_users"] as conn_users:
             conn_users.execute("""CREATE TABLE IF NOT EXISTS users (
                 fid INTEGER PRIMARY KEY, 
@@ -1186,13 +1167,13 @@ if __name__ == "__main__":
                 print(f"\n{F.RED}Login failed: Invalid bot token!{R}")
                 print(f"{F.YELLOW}Ensure your bot_token.txt file contains the proper token.{R}")
                 print(f"{F.YELLOW}If necessary, you can reset it via steps 3-4 here:{R}")
-                print(f"{F.YELLOW}https://github.com/whiteout-project/bot/wiki/Creating-a-Discord-Application{R}")
+                print(f"{F.YELLOW}https://github.com/xmnsorsaadx-ux/wos-danger/wiki/Creating-a-Discord-Application{R}")
                 break
 
             except discord.PrivilegedIntentsRequired:
                 print(f"\n{F.RED}Login failed: Privileged intents not enabled.{R}")
                 print(f"{F.YELLOW}Follow steps 5 onwards to enable the required intents:{R}")
-                print(f"{F.YELLOW}https://github.com/whiteout-project/bot/wiki/Creating-a-Discord-Application{R}")
+                print(f"{F.YELLOW}https://github.com/xmnsorsaadx-ux/wos-danger/wiki/Creating-a-Discord-Application{R}")
                 break
 
             except discord.HTTPException as e:
