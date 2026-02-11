@@ -60,11 +60,11 @@ MESSAGES: Dict[str, Dict[str, str]] = {
     },
     "alliance.operations.add": {
         "en": "Add Alliance",
-        "ar": "اضافة تحالف",
+        "ar": "إضافة تحالف",
     },
     "alliance.operations.add_desc": {
         "en": "Create a new alliance",
-        "ar": "انشاء تحالف جديد",
+        "ar": "إنشاء تحالف جديد",
     },
     "alliance.operations.edit": {
         "en": "Edit Alliance",
@@ -80,7 +80,7 @@ MESSAGES: Dict[str, Dict[str, str]] = {
     },
     "alliance.operations.delete_desc": {
         "en": "Remove an existing alliance",
-        "ar": "ازالة تحالف موجود",
+        "ar": "إزالة تحالف موجود",
     },
     "alliance.operations.view": {
         "en": "View Alliances",
