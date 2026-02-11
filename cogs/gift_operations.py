@@ -6023,16 +6023,16 @@ class OCRSettingsView(discord.ui.View):
                 await interaction.followup.send(f"{theme.deniedIcon} {message}", ephemeral=True)
 
         except ValueError:
-                await interaction.followup.send(
-                    f"{theme.deniedIcon} {t('gift.ocr.select_invalid', self.lang)}",
-                    ephemeral=True
-                )
+            await interaction.followup.send(
+                f"{theme.deniedIcon} {t('gift.ocr.select_invalid', self.lang)}",
+                ephemeral=True
+            )
         except Exception as e:
             self.cog.logger.exception("Error processing image save selection in OCRSettingsView.")
-                await interaction.followup.send(
-                    f"{theme.deniedIcon} {t('gift.ocr.select_update_error', self.lang)}",
-                    ephemeral=True
-                )
+            await interaction.followup.send(
+                f"{theme.deniedIcon} {t('gift.ocr.select_update_error', self.lang)}",
+                ephemeral=True
+            )
         
         async def update_task(save_images_value):
             self.cog.logger.info(f"Task started: Updating OCR save_images to {save_images_value}")

@@ -1152,6 +1152,7 @@ class MinisterSchedule(commands.Cog):
         if not log_channel:
             await interaction.followup.send(
                 t("minister.clear.log_channel_missing", lang)
+            )
             return
 
         try:
