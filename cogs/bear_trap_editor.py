@@ -6,8 +6,14 @@ import re
 from .bear_event_types import get_event_icon
 from .permission_handler import PermissionManager
 from .pimp_my_bot import theme
+from i18n import get_guild_language, t
 
-def check_mention_placeholder_misuse(text: str, is_embed: bool = False) -> str | None:
+
+def _get_lang(interaction: discord.Interaction | None) -> str:
+    guild_id = interaction.guild.id if interaction and interaction.guild else None
+    return get_guild_language(guild_id)
+
+def check_mention_placeholder_misuse(text: str, is_embed: bool = False, lang: str = "en") -> str | None:
     """
     Check if user typed a literal @mention instead of {tag} or @tag.
     Returns a warning message if misuse detected, None otherwise.
@@ -33,24 +39,28 @@ def check_mention_placeholder_misuse(text: str, is_embed: bool = False) -> str |
     if matches:
         examples = ", ".join(f"@{m}" for m in matches[:3])
         if is_embed:
-            return (
-                f"{theme.warnIcon} You typed `{examples}` but mentions don't work inside embeds.\n"
-                f"Use `{{tag}}` instead - it will add the mention above the embed."
+            return t(
+                "bear.editor.warn_embed_mention",
+                lang,
+                icon=theme.warnIcon,
+                examples=examples
             )
         else:
-            return (
-                f"{theme.warnIcon} You typed `{examples}` but this won't ping anyone.\n"
-                f"Use `{{tag}}` instead - it will be replaced with your configured mention."
+            return t(
+                "bear.editor.warn_plain_mention",
+                lang,
+                icon=theme.warnIcon,
+                examples=examples
             )
     return None
 
-def format_repeat_interval(repeat_minutes, notification_id=None) -> str:
+def format_repeat_interval(repeat_minutes, notification_id=None, lang: str = "en") -> str:
     if repeat_minutes == 0:
-        return f"{theme.deniedIcon} No repeat"
+        return t("bear.editor.repeat.none", lang, icon=theme.deniedIcon)
 
     if repeat_minutes == -1:
         if notification_id is None:
-            return "Custom Days"
+            return t("bear.editor.repeat.custom_days", lang)
 
         conn = sqlite3.connect("db/beartime.sqlite")
         cursor = conn.cursor()
@@ -61,7 +71,15 @@ def format_repeat_interval(repeat_minutes, notification_id=None) -> str:
         rows = cursor.fetchall()
         conn.close()
 
-        weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        weekday_names = [
+            t("bear.editor.weekday.monday", lang),
+            t("bear.editor.weekday.tuesday", lang),
+            t("bear.editor.weekday.wednesday", lang),
+            t("bear.editor.weekday.thursday", lang),
+            t("bear.editor.weekday.friday", lang),
+            t("bear.editor.weekday.saturday", lang),
+            t("bear.editor.weekday.sunday", lang),
+        ]
         day_set = set()
 
         for row in rows:
@@ -70,20 +88,21 @@ def format_repeat_interval(repeat_minutes, notification_id=None) -> str:
                     day_set.add(int(part))
 
         if not day_set:
-            return f"{theme.deniedIcon} No days selected"
+            return t("bear.editor.repeat.no_days", lang, icon=theme.deniedIcon)
 
         sorted_days = sorted(day_set)
         day_list = [weekday_names[day] for day in sorted_days]
 
         if len(day_list) == 1:
-            return f"Every {day_list[0]}"
-        else:
-            return "Every " + ", ".join(day_list[:-1]) + " and " + day_list[-1]
+            return t("bear.editor.repeat.every", lang, days=day_list[0])
+
+        and_word = t("bear.editor.and", lang)
+        return t("bear.editor.repeat.every", lang, days=", ".join(day_list[:-1]) + f" {and_word} " + day_list[-1])
 
     try:
         minutes = int(repeat_minutes)
     except ValueError:
-        return "Invalid repeat interval"
+        return t("bear.editor.repeat.invalid", lang)
 
     time_units = [
         ("month", 43200),
@@ -97,12 +116,14 @@ def format_repeat_interval(repeat_minutes, notification_id=None) -> str:
     for name, unit in time_units:
         value = minutes // unit
         if value > 0:
-            result.append(f"{value} {name}{'s' if value > 1 else ''}")
+            unit_key = f"bear.editor.unit.{name}_plural" if value > 1 else f"bear.editor.unit.{name}_single"
+            result.append(f"{value} {t(unit_key, lang)}")
             minutes %= unit
 
-    return " and ".join(result)
+    and_word = t("bear.editor.and", lang)
+    return f" {and_word} ".join(result)
 
-def format_mention(mention: str) -> str:
+def format_mention(mention: str, lang: str = "en") -> str:
     """Formats mention strings into Discord mention syntax."""
     if mention.startswith("role_"):
         role_id = mention.split("_")[1]
@@ -113,27 +134,28 @@ def format_mention(mention: str) -> str:
     elif mention == "everyone":
         return "@everyone"
     else:
-        return "No Mention"
+        return t("bear.editor.mention.none", lang)
 
-def format_notification_type(notification_type: int) -> str:
+def format_notification_type(notification_type: int, lang: str = "en") -> str:
     """Returns a formatted string for the given notification type."""
     notification_types = {
-        1: "Sends notifications at 30 minutes, 10 minutes, 5 minutes before and when time's up",
-        2: "Sends notifications at 10 minutes, 5 minutes before and when time's up",
-        3: "Sends notifications at 5 minutes before and when time's up",
-        4: "Sends notification only 5 minutes before",
-        5: "Sends notification only when time's up",
-        6: "Sends notifications at custom times"
+        1: t("bear.editor.notify_type.1", lang),
+        2: t("bear.editor.notify_type.2", lang),
+        3: t("bear.editor.notify_type.3", lang),
+        4: t("bear.editor.notify_type.4", lang),
+        5: t("bear.editor.notify_type.5", lang),
+        6: t("bear.editor.notify_type.6", lang),
     }
-    return notification_types.get(notification_type, "Unknown notification type")
+    return notification_types.get(notification_type, t("bear.editor.notify_type.unknown", lang))
 
 class EmbedFieldModal(discord.ui.Modal):
     def __init__(self, parent_view, field_name, label, placeholder, default="", style=discord.TextStyle.short,
-                 max_length=1024, required=False):
-        super().__init__(title=f"Edit {field_name}")
+                 max_length=1024, required=False, lang: str = "en"):
+        super().__init__(title=t("bear.editor.modal.edit_field", lang, field=field_name))
 
         self.parent_view = parent_view
         self.field_name = field_name
+        self.lang = lang
 
         self.input_field = discord.ui.TextInput(
             label=label,
@@ -151,7 +173,7 @@ class EmbedFieldModal(discord.ui.Modal):
         # Check for @ mention misuse in embed text fields and show warning
         text_fields = ("title", "embed_description", "footer", "author", "mention_message")
         if self.field_name in text_fields:
-            warning = check_mention_placeholder_misuse(self.input_field.value, is_embed=True)
+            warning = check_mention_placeholder_misuse(self.input_field.value, is_embed=True, lang=self.lang)
             if warning:
                 await interaction.followup.send(warning, ephemeral=True)
 
@@ -163,7 +185,10 @@ class EmbedFieldModal(discord.ui.Modal):
                 try:
                     int_color = int(value, 16)
                 except ValueError:
-                    await interaction.response.send_message("Invalid hex color code!", ephemeral=True)
+                    await interaction.response.send_message(
+                        t("bear.editor.color_invalid", self.lang),
+                        ephemeral=True
+                    )
                     return
 
                 self.parent_view.color = int_color
@@ -174,11 +199,14 @@ class EmbedFieldModal(discord.ui.Modal):
             await self.parent_view.update_embed_view(interaction)
         except Exception as e:
             print(f"Error in modal for {self.field_name}: {e}")
-            await interaction.followup.send(f"An error occurred! {e}", ephemeral=True)
+            await interaction.followup.send(
+                t("bear.editor.modal_error", self.lang, error=str(e)),
+                ephemeral=True
+            )
 
 class EmbedDataView(discord.ui.View):
     def __init__(self, cog, notification_id, title, description, color, image_url, thumbnail_url, footer, author,
-                 mention_message, event_type=None, hour=0, minute=0, next_notification=None):
+                 mention_message, event_type=None, hour=0, minute=0, next_notification=None, lang: str = "en"):
         super().__init__(timeout=None)
         self.cog = cog
         self.notification_id = notification_id
@@ -195,14 +223,25 @@ class EmbedDataView(discord.ui.View):
         self.hour = hour
         self.minute = minute
         self.next_notification = next_notification
+        self.lang = lang
+
+        self.edit_title.label = t("bear.editor.button.title", self.lang)
+        self.edit_description.label = t("bear.editor.button.description", self.lang)
+        self.edit_color.label = t("bear.editor.button.color", self.lang)
+        self.edit_mention_message.label = t("bear.editor.button.mention_message", self.lang)
+        self.edit_footer.label = t("bear.editor.button.footer", self.lang)
+        self.edit_author.label = t("bear.editor.button.author", self.lang)
+        self.edit_image_url.label = t("bear.editor.button.image", self.lang)
+        self.edit_thumbnail_url.label = t("bear.editor.button.thumbnail", self.lang)
+        self.notification_setting.label = t("bear.editor.button.settings", self.lang)
 
     def _replace_variables(self, text):
         """Replace notification variables with sample values for preview."""
         if not text:
             return text
 
-        example_time = "30 minutes"
-        example_name = self.event_type if self.event_type else "Event"
+        example_time = t("bear.editor.preview.time", self.lang)
+        example_name = self.event_type if self.event_type else t("bear.editor.preview.event", self.lang)
         example_emoji = get_event_icon(self.event_type) if self.event_type else theme.calendarIcon
         example_event_time = f"{self.hour:02d}:{self.minute:02d}"
 
@@ -212,9 +251,9 @@ class EmbedDataView(discord.ui.View):
                 next_dt = datetime.fromisoformat(self.next_notification.replace("+00:00", ""))
                 example_date = next_dt.strftime("%b %d")
             except:
-                example_date = "Dec 06"
+                example_date = t("bear.editor.preview.date_fallback", self.lang)
         else:
-            example_date = "Dec 06"
+            example_date = t("bear.editor.preview.date_fallback", self.lang)
 
         return (text
             .replace("%t", example_time)
@@ -249,11 +288,12 @@ class EmbedDataView(discord.ui.View):
             EmbedFieldModal(
                 parent_view=self,
                 field_name="title",
-                label="Embed Title",
-                placeholder="Enter notification title",
+                label=t("bear.editor.label.embed_title", self.lang),
+                placeholder=t("bear.editor.placeholder.title", self.lang),
                 default=self.title or "",
                 max_length=256,
-                required=True
+                required=True,
+                lang=self.lang
             )
         )
 
@@ -263,12 +303,13 @@ class EmbedDataView(discord.ui.View):
             EmbedFieldModal(
                 parent_view=self,
                 field_name="embed_description",
-                label="Embed Description",
-                placeholder="Enter notification description",
+                label=t("bear.editor.label.embed_description", self.lang),
+                placeholder=t("bear.editor.placeholder.description", self.lang),
                 default=self.embed_description or "",
                 max_length=4000,
                 style=discord.TextStyle.paragraph,
-                required=True
+                required=True,
+                lang=self.lang
             )
         )
 
@@ -282,11 +323,12 @@ class EmbedDataView(discord.ui.View):
             EmbedFieldModal(
                 parent_view=self,
                 field_name="color",
-                label="Embed hex code",
-                placeholder="Enter hex code",
+                label=t("bear.editor.label.color", self.lang),
+                placeholder=t("bear.editor.placeholder.color", self.lang),
                 default=default_hex,
                 max_length=7,
-                required=True
+                required=True,
+                lang=self.lang
             )
         )
 
@@ -296,10 +338,11 @@ class EmbedDataView(discord.ui.View):
             EmbedFieldModal(
                 parent_view=self,
                 field_name="mention_message",
-                label="mention message",
-                placeholder="Variables: %t=time left, %n=name, %e=time, %d=date, %i=emoji, @tag=mention",
+                label=t("bear.editor.label.mention_message", self.lang),
+                placeholder=t("bear.editor.placeholder.mention_message", self.lang),
                 default=self.mention_message or "",
-                required=False
+                required=False,
+                lang=self.lang
             )
         )
 
@@ -309,11 +352,12 @@ class EmbedDataView(discord.ui.View):
             EmbedFieldModal(
                 parent_view=self,
                 field_name="footer",
-                label="Embed Footer",
-                placeholder="Enter Footer",
+                label=t("bear.editor.label.footer", self.lang),
+                placeholder=t("bear.editor.placeholder.footer", self.lang),
                 default=self.footer or "",
                 max_length=2048,
-                required=False
+                required=False,
+                lang=self.lang
             )
         )
 
@@ -323,11 +367,12 @@ class EmbedDataView(discord.ui.View):
             EmbedFieldModal(
                 parent_view=self,
                 field_name="author",
-                label="Embed Author",
-                placeholder="Enter Author message",
+                label=t("bear.editor.label.author", self.lang),
+                placeholder=t("bear.editor.placeholder.author", self.lang),
                 default=self.author or "",
                 max_length=256,
-                required=False
+                required=False,
+                lang=self.lang
             )
         )
 
@@ -337,10 +382,11 @@ class EmbedDataView(discord.ui.View):
             EmbedFieldModal(
                 parent_view=self,
                 field_name="image_url",
-                label="Embed Image",
-                placeholder="Enter image url",
+                label=t("bear.editor.label.image", self.lang),
+                placeholder=t("bear.editor.placeholder.image", self.lang),
                 default=self.image_url or "",
-                required=False
+                required=False,
+                lang=self.lang
             )
         )
 
@@ -350,16 +396,18 @@ class EmbedDataView(discord.ui.View):
             EmbedFieldModal(
                 parent_view=self,
                 field_name="thumbnail_url",
-                label="Embed Thumbnail URL",
-                placeholder="Enter Thumbnail URL",
+                label=t("bear.editor.label.thumbnail", self.lang),
+                placeholder=t("bear.editor.placeholder.thumbnail", self.lang),
                 default=self.thumbnail_url or "",
-                required=False
+                required=False,
+                lang=self.lang
             )
         )
 
     @discord.ui.button(label="Edit Notification settings", style=discord.ButtonStyle.primary, emoji=f"{theme.settingsIcon}")
     async def notification_setting(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
+        lang = _get_lang(interaction)
 
         conn = sqlite3.connect("db/beartime.sqlite")
         cursor = conn.cursor()
@@ -370,7 +418,10 @@ class EmbedDataView(discord.ui.View):
         conn.close()
 
         if not result:
-            await interaction.followup.send(f"{theme.deniedIcon} Notification not found in database.", ephemeral=True)
+            await interaction.followup.send(
+                t("bear.editor.notification_missing", lang, icon=theme.deniedIcon),
+                ephemeral=True
+            )
             return
 
         channel_id, hours, minutes, description, mention, repeat, next_notification, timezone, notification_type = result
@@ -386,25 +437,36 @@ class EmbedDataView(discord.ui.View):
             repeat=repeat,
             next_notification=next_notification,
             timezone=timezone,
-            notification_type=notification_type
+            notification_type=notification_type,
+            lang=lang
         )
         new_view.message = self.message
 
         next_notification_date = datetime.fromisoformat(next_notification).strftime("%d/%m/%Y")
-        formatted_repeat = format_repeat_interval(repeat, self.notification_id)
-        formatted_mention = format_mention(mention)
-        formatted_type = format_notification_type(notification_type)
+        formatted_repeat = format_repeat_interval(repeat, self.notification_id, lang=lang)
+        formatted_mention = format_mention(mention, lang=lang)
+        formatted_type = format_notification_type(notification_type, lang=lang)
 
         embed = discord.Embed(
-            title="Editing Notification",
-            description=(
-                f"**{theme.calendarIcon} Next Notification date:** {next_notification_date}\n"
-                f"**{theme.timeIcon} Time:** {hours:02d}:{minutes:02d} ({timezone})\n"
-                f"**{theme.announceIcon} Channel:** <#{channel_id}>\n"
-                f"**{theme.editListIcon} Description:** {description}\n\n"
-                f"**{theme.settingsIcon} Notification Type**\n{formatted_type}\n\n"
-                f"**{theme.membersIcon} Mention:** {formatted_mention}\n"
-                f"**{theme.retryIcon} Repeat:** {formatted_repeat}\n"
+            title=t("bear.editor.edit_title", lang),
+            description=t(
+                "bear.editor.edit_desc",
+                lang,
+                calendar=theme.calendarIcon,
+                time_icon=theme.timeIcon,
+                announce=theme.announceIcon,
+                edit_icon=theme.editListIcon,
+                settings_icon=theme.settingsIcon,
+                members_icon=theme.membersIcon,
+                retry_icon=theme.retryIcon,
+                next_date=next_notification_date,
+                time=f"{hours:02d}:{minutes:02d}",
+                timezone=timezone,
+                channel_id=channel_id,
+                description=description,
+                notification_type=formatted_type,
+                mention=formatted_mention,
+                repeat=formatted_repeat
             ),
             color=theme.emColor1,
         )
@@ -413,7 +475,7 @@ class EmbedDataView(discord.ui.View):
 
 class PlainEditorView(discord.ui.View):
     def __init__(self, cog, notification_id, channel_id, hours, minutes, description, mention, repeat,
-                 next_notification, timezone, notification_type):
+                 next_notification, timezone, notification_type, lang: str = "en"):
         super().__init__(timeout=None)
         self.cog = cog
         self.notification_id = notification_id
@@ -427,6 +489,14 @@ class PlainEditorView(discord.ui.View):
         self.timezone = timezone
         self.notification_type = notification_type
         self.message = None
+        self.lang = lang
+
+        self.description_button.label = t("bear.editor.button.description", self.lang)
+        self.edit_channel.label = t("bear.editor.button.channel", self.lang)
+        self.edit_time.label = t("bear.editor.button.time", self.lang)
+        self.edit_repeat.label = t("bear.editor.button.repeat", self.lang)
+        self.edit_mention.label = t("bear.editor.button.mention", self.lang)
+        self.edit_notification_ping.label = t("bear.editor.button.notification_ping", self.lang)
 
         if self.repeat == -1:
             try:
@@ -443,29 +513,39 @@ class PlainEditorView(discord.ui.View):
         for child in self.children:
             if isinstance(child, discord.ui.Button) and child.custom_id == "description_button":
                 if "EMBED_MESSAGE" in self.description:
-                    child.label = "Edit Embed"
+                    child.label = t("bear.editor.button.edit_embed", self.lang)
                     child.emoji = theme.editListIcon
                 elif "PLAIN_MESSAGE" in self.description:
-                    child.label = "Description"
+                    child.label = t("bear.editor.button.description", self.lang)
                 else:
-                    child.label = "Description"
+                    child.label = t("bear.editor.button.description", self.lang)
 
     async def update_embed(self, interaction: discord.Interaction):
         """Update the embed message when changes are made."""
         next_notification_date = datetime.fromisoformat(self.next_notification).strftime("%d/%m/%Y")
-        formatted_repeat = format_repeat_interval(self.repeat, self.notification_id)
-        formatted_mention = format_mention(self.mention)
-        formatted_type = format_notification_type(self.notification_type)
+        formatted_repeat = format_repeat_interval(self.repeat, self.notification_id, lang=self.lang)
+        formatted_mention = format_mention(self.mention, lang=self.lang)
+        formatted_type = format_notification_type(self.notification_type, lang=self.lang)
         embed = discord.Embed(
-            title="Editing Notification",
-            description=(
-                f"**{theme.calendarIcon} Next Notification date:** {next_notification_date}\n"
-                f"**{theme.timeIcon} Time:** {self.hours:02d}:{self.minutes:02d} ({self.timezone})\n"
-                f"**{theme.announceIcon} Channel:** <#{self.channel_id}>\n"
-                f"**{theme.editListIcon} Description:** {self.description}\n\n"
-                f"**{theme.settingsIcon} Notification Type**\n{formatted_type}\n\n"
-                f"**{theme.membersIcon} Mention:** {formatted_mention}\n"
-                f"**{theme.retryIcon} Repeat:** {formatted_repeat}\n"
+            title=t("bear.editor.edit_title", self.lang),
+            description=t(
+                "bear.editor.edit_desc",
+                self.lang,
+                calendar=theme.calendarIcon,
+                time_icon=theme.timeIcon,
+                announce=theme.announceIcon,
+                edit_icon=theme.editListIcon,
+                settings_icon=theme.settingsIcon,
+                members_icon=theme.membersIcon,
+                retry_icon=theme.retryIcon,
+                next_date=next_notification_date,
+                time=f"{self.hours:02d}:{self.minutes:02d}",
+                timezone=self.timezone,
+                channel_id=self.channel_id,
+                description=self.description,
+                notification_type=formatted_type,
+                mention=formatted_mention,
+                repeat=formatted_repeat
             ),
             color=theme.emColor1,
         )
@@ -474,7 +554,7 @@ class PlainEditorView(discord.ui.View):
     @discord.ui.button(label="Description", style=discord.ButtonStyle.primary, custom_id="description_button")
     async def description_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if "EMBED_MESSAGE" in self.description:
-            button.label = "Edit Embed"
+            button.label = t("bear.editor.button.edit_embed", self.lang)
             button.emoji = theme.editListIcon
             # await interaction.response.defer()
             try:
@@ -482,11 +562,11 @@ class PlainEditorView(discord.ui.View):
             except Exception as e:
                 print(f"error: {e}")
         elif "PLAIN_MESSAGE" in self.description:
-            button.label = "Description"
+            button.label = t("bear.editor.button.description", self.lang)
 
             class DescriptionModal(discord.ui.Modal, title="Edit Description"):
                 def __init__(self, parent_view):
-                    super().__init__()
+                    super().__init__(title=t("bear.editor.modal.edit_description", parent_view.lang))
                     self.parent_view = parent_view
 
                     # Extract the existing PLAIN_MESSAGE part if it exists
@@ -494,17 +574,21 @@ class PlainEditorView(discord.ui.View):
                     plain_message_part = next((p for p in parts if p.startswith("PLAIN_MESSAGE:")), "PLAIN_MESSAGE:")
                     saved_description = plain_message_part.replace("PLAIN_MESSAGE:", "")
 
-                    self.description = discord.ui.TextInput(label="Message",
-                                                            placeholder="Variables: {tag}=mention, {time}=time left, %n=name, %e=time, %d=date, %i=emoji",
-                                                            style=discord.TextStyle.paragraph, required=True,
-                                                            default=saved_description, max_length=2000)
+                    self.description = discord.ui.TextInput(
+                        label=t("bear.editor.label.message", parent_view.lang),
+                        placeholder=t("bear.editor.placeholder.message", parent_view.lang),
+                        style=discord.TextStyle.paragraph,
+                        required=True,
+                        default=saved_description,
+                        max_length=2000
+                    )
                     self.add_item(self.description)
 
                 async def on_submit(self, modal_interaction: discord.Interaction):
                     await modal_interaction.response.defer()
 
                     # Check for potential @mention misuse and show warning
-                    warning = check_mention_placeholder_misuse(self.description.value)
+                    warning = check_mention_placeholder_misuse(self.description.value, lang=self.parent_view.lang)
                     if warning:
                         await modal_interaction.followup.send(warning, ephemeral=True)
 
@@ -521,14 +605,17 @@ class PlainEditorView(discord.ui.View):
                         await self.parent_view.update_embed(modal_interaction)
                     except Exception as e:
                         print(f"Error in DescriptionModal: {e}")
-                        await modal_interaction.followup.send(f"{theme.deniedIcon} An error occurred!", ephemeral=True)
+                        await modal_interaction.followup.send(
+                            t("bear.editor.modal_error_generic", self.parent_view.lang, icon=theme.deniedIcon),
+                            ephemeral=True
+                        )
 
             await interaction.response.send_modal(DescriptionModal(self))
 
     @discord.ui.button(label="Channel", style=discord.ButtonStyle.primary)
     async def edit_channel(self, interaction: discord.Interaction, button: discord.ui.Button):
         channel_select = discord.ui.ChannelSelect(
-            placeholder="Select a channel for notifications",
+            placeholder=t("bear.editor.placeholder.channel", self.lang),
             channel_types=[discord.ChannelType.text, discord.ChannelType.news],
             min_values=1,
             max_values=1
@@ -546,14 +633,18 @@ class PlainEditorView(discord.ui.View):
         view = discord.ui.View()
         view.add_item(channel_select)
 
-        await interaction.response.send_message("Select a new channel:", view=view, ephemeral=True)
+        await interaction.response.send_message(
+            t("bear.editor.channel_select", self.lang),
+            view=view,
+            ephemeral=True
+        )
 
     @discord.ui.button(label="Time", style=discord.ButtonStyle.primary)
     async def edit_time(self, interaction: discord.Interaction, button: discord.ui.Button):
 
         class TimeModal(discord.ui.Modal, title="Edit Notification Time"):
             def __init__(self, parent_view):
-                super().__init__()
+                super().__init__(title=t("bear.editor.modal.edit_time", parent_view.lang))
                 self.parent_view = parent_view
                 next_notification_str = parent_view.next_notification.replace("+00:00", "")
                 current_dt = datetime.strptime(next_notification_str, "%Y-%m-%dT%H:%M:%S")
@@ -561,9 +652,21 @@ class PlainEditorView(discord.ui.View):
                 saved_hour = str(current_dt.hour)
                 saved_minute = str(current_dt.minute)
 
-                self.date = discord.ui.TextInput(label="Date (DD/MM/YYYY)", required=True, default=saved_date)
-                self.hour = discord.ui.TextInput(label="Hour (0-23)", required=True, default=saved_hour)
-                self.minute = discord.ui.TextInput(label="Minute (0-59)", required=True, default=saved_minute)
+                self.date = discord.ui.TextInput(
+                    label=t("bear.editor.label.date", parent_view.lang),
+                    required=True,
+                    default=saved_date
+                )
+                self.hour = discord.ui.TextInput(
+                    label=t("bear.editor.label.hour", parent_view.lang),
+                    required=True,
+                    default=saved_hour
+                )
+                self.minute = discord.ui.TextInput(
+                    label=t("bear.editor.label.minute", parent_view.lang),
+                    required=True,
+                    default=saved_minute
+                )
 
                 self.add_item(self.date)
                 self.add_item(self.hour)
@@ -577,8 +680,10 @@ class PlainEditorView(discord.ui.View):
                     new_date = self.date.value.strip() if self.date.value else None
 
                     if not hasattr(self.parent_view, "next_notification"):
-                        await modal_interaction.followup.send(f"{theme.deniedIcon} Error: `next_notification` is missing!",
-                                                              ephemeral=True)
+                        await modal_interaction.followup.send(
+                            t("bear.editor.error_missing_next", self.parent_view.lang, icon=theme.deniedIcon),
+                            ephemeral=True
+                        )
                         return
 
                     current_dt = datetime.strptime(self.parent_view.next_notification, "%Y-%m-%dT%H:%M:%S+00:00")
@@ -589,8 +694,10 @@ class PlainEditorView(discord.ui.View):
                             day, month, year = map(int, new_date.split("/"))
                             new_dt = new_dt.replace(day=day, month=month, year=year)
                         except ValueError:
-                            await modal_interaction.followup.send(f"{theme.deniedIcon} Invalid date format! Use DD/MM/YYYY.",
-                                                                  ephemeral=True)
+                            await modal_interaction.followup.send(
+                                t("bear.editor.error_invalid_date", self.parent_view.lang, icon=theme.deniedIcon),
+                                ephemeral=True
+                            )
                             return
 
                     self.parent_view.hours = new_hours
@@ -601,10 +708,16 @@ class PlainEditorView(discord.ui.View):
                     await self.parent_view.update_embed(modal_interaction)
 
                 except ValueError:
-                    await modal_interaction.followup.send(f"{theme.deniedIcon} Invalid input! Please enter numbers only.", ephemeral=True)
+                    await modal_interaction.followup.send(
+                        t("bear.editor.error_numbers_only", self.parent_view.lang, icon=theme.deniedIcon),
+                        ephemeral=True
+                    )
                 except Exception as e:
                     print(f"Error in TimeModal: {e}")
-                    await modal_interaction.followup.send(f"{theme.deniedIcon} An error occurred!", ephemeral=True)
+                    await modal_interaction.followup.send(
+                        t("bear.editor.modal_error_generic", self.parent_view.lang, icon=theme.deniedIcon),
+                        ephemeral=True
+                    )
 
         try:
             await interaction.response.send_modal(TimeModal(self))
@@ -618,11 +731,17 @@ class PlainEditorView(discord.ui.View):
                 super().__init__(timeout=None)
                 self.parent_view = parent_view
 
-                custom_button = discord.ui.Button(label="Custom Intervals", style=discord.ButtonStyle.secondary)
+                custom_button = discord.ui.Button(
+                    label=t("bear.editor.repeat.custom_intervals", parent_view.lang),
+                    style=discord.ButtonStyle.secondary
+                )
                 custom_button.callback = lambda i: send_custom_modal(i, self.parent_view)
                 self.add_item(custom_button)
 
-                specific_button = discord.ui.Button(label="Specific Days", style=discord.ButtonStyle.secondary)
+                specific_button = discord.ui.Button(
+                    label=t("bear.editor.repeat.specific_days", parent_view.lang),
+                    style=discord.ButtonStyle.secondary
+                )
                 specific_button.callback = lambda i: send_day_selector(i, self.parent_view)
                 self.add_item(specific_button)
 
@@ -637,23 +756,26 @@ class PlainEditorView(discord.ui.View):
                         self.selected_days = []
 
                         self.select = discord.ui.Select(
-                            placeholder="Select days of the week",
+                            placeholder=t("bear.editor.repeat.select_days", parent_view.lang),
                             min_values=1,
                             max_values=7,
                             options=[
-                                discord.SelectOption(label="Monday", value="Monday"),
-                                discord.SelectOption(label="Tuesday", value="Tuesday"),
-                                discord.SelectOption(label="Wednesday", value="Wednesday"),
-                                discord.SelectOption(label="Thursday", value="Thursday"),
-                                discord.SelectOption(label="Friday", value="Friday"),
-                                discord.SelectOption(label="Saturday", value="Saturday"),
-                                discord.SelectOption(label="Sunday", value="Sunday"),
+                                discord.SelectOption(label=t("bear.editor.weekday.monday", parent_view.lang), value="Monday"),
+                                discord.SelectOption(label=t("bear.editor.weekday.tuesday", parent_view.lang), value="Tuesday"),
+                                discord.SelectOption(label=t("bear.editor.weekday.wednesday", parent_view.lang), value="Wednesday"),
+                                discord.SelectOption(label=t("bear.editor.weekday.thursday", parent_view.lang), value="Thursday"),
+                                discord.SelectOption(label=t("bear.editor.weekday.friday", parent_view.lang), value="Friday"),
+                                discord.SelectOption(label=t("bear.editor.weekday.saturday", parent_view.lang), value="Saturday"),
+                                discord.SelectOption(label=t("bear.editor.weekday.sunday", parent_view.lang), value="Sunday"),
                             ]
                         )
                         self.select.callback = self.on_select
                         self.add_item(self.select)
 
-                        confirm_button = discord.ui.Button(label="Confirm", style=discord.ButtonStyle.success)
+                        confirm_button = discord.ui.Button(
+                            label=t("bear.editor.confirm", parent_view.lang),
+                            style=discord.ButtonStyle.success
+                        )
                         confirm_button.callback = self.confirm_days
                         self.add_item(confirm_button)
 
@@ -665,7 +787,10 @@ class PlainEditorView(discord.ui.View):
                         await interaction.response.defer()
 
                         if not self.selected_days:
-                            await interaction.followup.send("Please select at least one day.", ephemeral=True)
+                            await interaction.followup.send(
+                                t("bear.editor.repeat.select_one_day", self.parent_view.lang),
+                                ephemeral=True
+                            )
                             return
 
                         weekdays_index = {
@@ -682,7 +807,7 @@ class PlainEditorView(discord.ui.View):
                         await self.parent_view.update_embed(interaction)
 
                 await interaction.edit_original_response(
-                    content="Select specific days for the notification:",
+                    content=t("bear.editor.repeat.select_specific", parent_view.lang),
                     view=DaysView()
                 )
 
@@ -692,13 +817,13 @@ class PlainEditorView(discord.ui.View):
         async def send_custom_modal(interaction: discord.Interaction, parent_view):
             class CustomRepeatModal(discord.ui.Modal, title="Edit Repeat Interval"):
                 def __init__(self):
-                    super().__init__()
+                    super().__init__(title=t("bear.editor.repeat.edit_interval", parent_view.lang))
                     self.parent_view = parent_view
-                    self.month = discord.ui.TextInput(label="Months", required=False, default="0")
-                    self.week = discord.ui.TextInput(label="Weeks", required=False, default="0")
-                    self.day = discord.ui.TextInput(label="Days", required=False, default="0")
-                    self.hour = discord.ui.TextInput(label="Hours", required=False, default="0")
-                    self.minute = discord.ui.TextInput(label="Minutes", required=False, default="0")
+                    self.month = discord.ui.TextInput(label=t("bear.editor.unit.month_plural", parent_view.lang), required=False, default="0")
+                    self.week = discord.ui.TextInput(label=t("bear.editor.unit.week_plural", parent_view.lang), required=False, default="0")
+                    self.day = discord.ui.TextInput(label=t("bear.editor.unit.day_plural", parent_view.lang), required=False, default="0")
+                    self.hour = discord.ui.TextInput(label=t("bear.editor.unit.hour_plural", parent_view.lang), required=False, default="0")
+                    self.minute = discord.ui.TextInput(label=t("bear.editor.unit.minute_plural", parent_view.lang), required=False, default="0")
                     self.add_item(self.month)
                     self.add_item(self.week)
                     self.add_item(self.day)
@@ -723,16 +848,17 @@ class PlainEditorView(discord.ui.View):
 
                     except Exception as e:
                         print(f"Error in CustomRepeatModal: {e}")
-                        await modal_interaction.followup.send(f"{theme.deniedIcon} An error occurred!", ephemeral=True)
+                        await modal_interaction.followup.send(
+                            t("bear.editor.modal_error_generic", parent_view.lang, icon=theme.deniedIcon),
+                            ephemeral=True
+                        )
 
             await interaction.response.send_modal(CustomRepeatModal())
 
         view = RepeatOptionsView(self)
 
         await interaction.response.send_message(
-            content="Choose how you want to repeat the notification:\n"
-                    "*  Custom intervals --> Every 2 days, 1 week, 1 month, etc\n"
-                    "*  Specific days --> Every Sunday, Sunday and Tuesday, etc",
+            content=t("bear.editor.repeat.choose", self.lang),
             view=view,
             ephemeral=True,
         )
@@ -750,7 +876,7 @@ class PlainEditorView(discord.ui.View):
                 self.mention = "none"
             elif mention_type == "role":
                 role_select = discord.ui.RoleSelect(
-                    placeholder=f"{theme.searchIcon} Search and select who to mention...",
+                    placeholder=t("bear.editor.mention.search", self.lang, icon=theme.searchIcon),
                     min_values=1,
                     max_values=1
                 )
@@ -766,12 +892,16 @@ class PlainEditorView(discord.ui.View):
                 role_view = discord.ui.View()
                 role_view.add_item(role_select)
 
-                await mention_interaction.followup.send("Select a role:", view=role_view, ephemeral=True)
+                await mention_interaction.followup.send(
+                    t("bear.editor.mention.select_role", self.lang),
+                    view=role_view,
+                    ephemeral=True
+                )
                 return
 
             elif mention_type == "member":
                 user_select = discord.ui.UserSelect(
-                    placeholder=f"{theme.searchIcon} Search and select who to mention...",
+                    placeholder=t("bear.editor.mention.search", self.lang, icon=theme.searchIcon),
                     min_values=1,
                     max_values=1
                 )
@@ -787,7 +917,11 @@ class PlainEditorView(discord.ui.View):
                 user_view = discord.ui.View()
                 user_view.add_item(user_select)
 
-                await mention_interaction.followup.send("Select a user:", view=user_view, ephemeral=True)
+                await mention_interaction.followup.send(
+                    t("bear.editor.mention.select_user", self.lang),
+                    view=user_view,
+                    ephemeral=True
+                )
                 return
 
             # Update the mention type and refresh the embed
@@ -795,8 +929,12 @@ class PlainEditorView(discord.ui.View):
             await self.update_embed(mention_interaction)
 
         # Create buttons for mention types
-        for label, mention_type in [(f"{theme.announceIcon} everyone", "everyone"), (f"{theme.membersIcon} Select Role", "role"),
-                                    (f"{theme.userIcon} Select Member", "member"), (f"{theme.muteIcon} No Mention", "none")]:
+        for label, mention_type in [
+            (t("bear.editor.mention.everyone", self.lang, icon=theme.announceIcon), "everyone"),
+            (t("bear.editor.mention.role", self.lang, icon=theme.membersIcon), "role"),
+            (t("bear.editor.mention.member", self.lang, icon=theme.userIcon), "member"),
+            (t("bear.editor.mention.none", self.lang, icon=theme.muteIcon), "none")
+        ]:
             btn = discord.ui.Button(label=label, style=discord.ButtonStyle.secondary)
 
             async def button_callback(inter: discord.Interaction, t=mention_type):
@@ -805,7 +943,11 @@ class PlainEditorView(discord.ui.View):
             btn.callback = button_callback
             view.add_item(btn)
 
-        await interaction.response.send_message("Choose mention type:", view=view, ephemeral=True)
+        await interaction.response.send_message(
+            t("bear.editor.mention.choose", self.lang),
+            view=view,
+            ephemeral=True
+        )
 
     @discord.ui.button(label="Notification Ping", style=discord.ButtonStyle.primary)
     async def edit_notification_ping(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -813,12 +955,12 @@ class PlainEditorView(discord.ui.View):
         view = discord.ui.View()
 
         options = [
-            ("30m, 10m, 5m & Time", 1),
-            ("10m, 5m & Time", 2),
-            ("5m & Time", 3),
-            ("Only 5m", 4),
-            ("Only Time", 5),
-            ("Custom Times", 6),
+            (t("bear.editor.ping.30_10_5", self.lang), 1),
+            (t("bear.editor.ping.10_5", self.lang), 2),
+            (t("bear.editor.ping.5", self.lang), 3),
+            (t("bear.editor.ping.only_5", self.lang), 4),
+            (t("bear.editor.ping.only_time", self.lang), 5),
+            (t("bear.editor.ping.custom", self.lang), 6),
         ]
 
         for label, value in options:
@@ -827,11 +969,11 @@ class PlainEditorView(discord.ui.View):
                 if value == 6:  # Custom Times button pressed
                     class CustomTimeModal(discord.ui.Modal, title="Enter Custom Notification Times"):
                         def __init__(self, parent_view):
-                            super().__init__()
+                            super().__init__(title=t("bear.editor.ping.custom_title", parent_view.lang))
                             self.parent_view = parent_view
                             self.times_input = discord.ui.TextInput(
-                                label="Enter times (e.g., 20-10-3-2-1-0)",
-                                placeholder="Separate times with '-'",
+                                label=t("bear.editor.ping.custom_label", parent_view.lang),
+                                placeholder=t("bear.editor.ping.custom_placeholder", parent_view.lang),
                                 required=True
                             )
                             self.add_item(self.times_input)
@@ -842,7 +984,9 @@ class PlainEditorView(discord.ui.View):
                             # ✅ Validate format (only numbers and dashes allowed)
                             if not all(c.isdigit() or c == '-' for c in new_times):
                                 await modal_interaction.response.send_message(
-                                    f"{theme.deniedIcon} Invalid format! Use numbers separated by '-'.", ephemeral=True)
+                                    t("bear.editor.ping.custom_invalid", parent_view.lang, icon=theme.deniedIcon),
+                                    ephemeral=True
+                                )
                                 return
 
                             # ✅ Check if description contains "CUSTOM_TIMES:"
@@ -876,28 +1020,8 @@ class PlainEditorView(discord.ui.View):
             view.add_item(button)
 
         embed = discord.Embed(
-            title=f"{theme.alarmClockIcon} Select Notification Type",
-            description=(
-                "Choose when to send notifications:\n\n"
-                "**30m, 10m, 5m & Time**\n"
-                "• 30 minutes before\n"
-                "• 10 minutes before\n"
-                "• 5 minutes before\n"
-                "• When time's up\n\n"
-                "**10m, 5m & Time**\n"
-                "• 10 minutes before\n"
-                "• 5 minutes before\n"
-                "• When time's up\n\n"
-                "**5m & Time**\n"
-                "• 5 minutes before\n"
-                "• When time's up\n\n"
-                "**Only 5m**\n"
-                "• Only 5 minutes before\n\n"
-                "**Only Time**\n"
-                "• Only when time's up\n\n"
-                "**Custom Times**\n"
-                "• Set your own notification times"
-            ),
+            title=t("bear.editor.ping.select_title", self.lang, icon=theme.alarmClockIcon),
+            description=t("bear.editor.ping.select_desc", self.lang),
             color=theme.emColor1
         )
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
@@ -908,11 +1032,12 @@ class NotificationEditor(commands.Cog):
 
     async def start_edit_process(self, interaction: discord.Interaction, notification_id: int,
                                  original_message: discord.Message = None):
+        lang = _get_lang(interaction)
         # Permission check
         is_admin, _ = PermissionManager.is_admin(interaction.user.id)
         if not is_admin:
             await interaction.response.send_message(
-                f"{theme.deniedIcon} You don't have permission to edit notifications!",
+                t("bear.editor.no_permission", lang, icon=theme.deniedIcon),
                 ephemeral=True
             )
             return
@@ -925,7 +1050,10 @@ class NotificationEditor(commands.Cog):
         result = cursor.fetchone()
 
         if not result:
-            await interaction.response.send_message(f"{theme.deniedIcon} Notification ID not found.", ephemeral=True)
+            await interaction.response.send_message(
+                t("bear.editor.notification_id_missing", lang, icon=theme.deniedIcon),
+                ephemeral=True
+            )
             return
 
         channel_id, hours, minutes, description, mention, repeat, next_notification, timezone, notification_type, event_type = result
@@ -936,8 +1064,23 @@ class NotificationEditor(commands.Cog):
             embed_results = cursor.fetchone()
             title, embed_description, color, image_url, thumbnail_url, footer, author, mention_message = embed_results
 
-            view = EmbedDataView(self, notification_id, title, embed_description, color, image_url, thumbnail_url,
-                                 footer, author, mention_message, event_type, hours, minutes, next_notification)
+            view = EmbedDataView(
+                self,
+                notification_id,
+                title,
+                embed_description,
+                color,
+                image_url,
+                thumbnail_url,
+                footer,
+                author,
+                mention_message,
+                event_type,
+                hours,
+                minutes,
+                next_notification,
+                lang=lang
+            )
 
             # Replace variables for initial display
             embed = discord.Embed(
@@ -966,23 +1109,45 @@ class NotificationEditor(commands.Cog):
 
         elif "PLAIN_MESSAGE" in description:
             try:
-                view = PlainEditorView(self, notification_id, channel_id, hours, minutes, description, mention, repeat,
-                                       next_notification, timezone, notification_type)
+                view = PlainEditorView(
+                    self,
+                    notification_id,
+                    channel_id,
+                    hours,
+                    minutes,
+                    description,
+                    mention,
+                    repeat,
+                    next_notification,
+                    timezone,
+                    notification_type,
+                    lang=lang
+                )
 
                 next_notification_date = datetime.fromisoformat(next_notification).strftime("%d/%m/%Y")
-                formatted_repeat = format_repeat_interval(repeat, notification_id)
-                formatted_mention = format_mention(mention)
-                formatted_type = format_notification_type(notification_type)
+                formatted_repeat = format_repeat_interval(repeat, notification_id, lang=lang)
+                formatted_mention = format_mention(mention, lang=lang)
+                formatted_type = format_notification_type(notification_type, lang=lang)
                 embed = discord.Embed(
-                    title="Editing Notification",
-                    description=(
-                        f"**{theme.calendarIcon} Next Notification date:** {next_notification_date}\n"
-                        f"**{theme.timeIcon} Time:** {hours:02d}:{minutes:02d} ({timezone})\n"
-                        f"**{theme.announceIcon} Channel:** <#{channel_id}>\n"
-                        f"**{theme.editListIcon} Description:** {description}\n\n"
-                        f"**{theme.settingsIcon} Notification Type**\n{formatted_type}\n\n"
-                        f"**{theme.membersIcon} Mention:** {formatted_mention}\n"
-                        f"**{theme.retryIcon} Repeat:** {formatted_repeat}\n"
+                    title=t("bear.editor.edit_title", lang),
+                    description=t(
+                        "bear.editor.edit_desc",
+                        lang,
+                        calendar=theme.calendarIcon,
+                        time_icon=theme.timeIcon,
+                        announce=theme.announceIcon,
+                        edit_icon=theme.editListIcon,
+                        settings_icon=theme.settingsIcon,
+                        members_icon=theme.membersIcon,
+                        retry_icon=theme.retryIcon,
+                        next_date=next_notification_date,
+                        time=f"{hours:02d}:{minutes:02d}",
+                        timezone=timezone,
+                        channel_id=channel_id,
+                        description=description,
+                        notification_type=formatted_type,
+                        mention=formatted_mention,
+                        repeat=formatted_repeat
                     ),
                     color=theme.emColor1,
                 )
@@ -990,7 +1155,10 @@ class NotificationEditor(commands.Cog):
                 message = await interaction.followup.send(embed=embed, view=view, ephemeral=True)
             except Exception as e:
                 print(f"[ERROR] During PLAIN_MESSAGE handling: {e}")
-                await interaction.followup.send(f"An error occurred in PLAIN_MESSAGE section. {e}", ephemeral=True)
+                await interaction.followup.send(
+                    t("bear.editor.plain_error", lang, error=str(e)),
+                    ephemeral=True
+                )
                 return
         else:
             print(f"No known format matched, description is {description}")

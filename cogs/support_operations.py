@@ -45,7 +45,7 @@ class SupportOperations(commands.Cog):
                 await interaction.user.send(embed=support_embed)
             except discord.Forbidden:
                 await interaction.followup.send(
-                    f"{theme.deniedIcon} Could not send DM because your DMs are closed!",
+                    f"{theme.deniedIcon} {t('support.info.dm_closed', lang)}",
                     ephemeral=True
                 )
         except Exception as e:
@@ -89,12 +89,12 @@ class SupportView(discord.ui.View):
                 f"{t('support.about.body', lang)}\n\n"
                 f"**{t('support.about.features', lang)}**\n"
                 f"{theme.middleDivider}\n"
-                f"• Alliance member management\n"
-                f"• Gift code operations\n"
-                f"• Automated member tracking\n"
-                f"• Bear trap notifications\n"
-                f"• ID channel verification\n"
-                f"• and more...\n\n"
+                f"• {t('support.about.feature_members', lang)}\n"
+                f"• {t('support.about.feature_gifts', lang)}\n"
+                f"• {t('support.about.feature_tracking', lang)}\n"
+                f"• {t('support.about.feature_bear', lang)}\n"
+                f"• {t('support.about.feature_id', lang)}\n"
+                f"• {t('support.about.feature_more', lang)}\n\n"
                 f"**{t('support.about.contributing', lang)}**\n"
                 f"{theme.middleDivider}\n"
                 f"{t('support.about.contributing_body', lang)}"
@@ -110,7 +110,7 @@ class SupportView(discord.ui.View):
                 await interaction.user.send(embed=about_embed)
             except discord.Forbidden:
                 await interaction.followup.send(
-                    f"{theme.deniedIcon} Could not send DM because your DMs are closed!",
+                    f"{theme.deniedIcon} {t('support.info.dm_closed', lang)}",
                     ephemeral=True
                 )
         except Exception as e:

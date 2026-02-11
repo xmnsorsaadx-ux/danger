@@ -7,11 +7,25 @@ import time
 import ssl
 from .permission_handler import PermissionManager
 from .pimp_my_bot import theme
+from i18n import get_guild_language, t
+
+
+def _get_lang(interaction: discord.Interaction | None) -> str:
+    guild_id = interaction.guild.id if interaction and interaction.guild else None
+    return get_guild_language(guild_id)
 
 class RegisterSettingsView(discord.ui.View):
-    def __init__(self, cog):
+    def __init__(self, cog, lang: str):
         super().__init__(timeout=None)
         self.cog = cog
+        self.lang = lang
+        for item in self.children:
+            if not isinstance(item, discord.ui.Button):
+                continue
+            if item.custom_id == "enable_register":
+                item.label = t("registration.settings.enable", self.lang)
+            elif item.custom_id == "disable_register":
+                item.label = t("registration.settings.disable", self.lang)
         
     def change_settings(self, enabled: bool):
         try:
@@ -42,9 +56,15 @@ class RegisterSettingsView(discord.ui.View):
     async def enable_register_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
             self.change_settings(True)
-            await interaction.response.send_message(f"{theme.verifiedIcon} Registration has been enabled.", ephemeral=True)
+            await interaction.response.send_message(
+                f"{theme.verifiedIcon} {t('registration.settings.enabled', _get_lang(interaction))}",
+                ephemeral=True
+            )
         except Exception as _:
-            await interaction.response.send_message(f"{theme.deniedIcon} An error occurred while enabling registration.", ephemeral=True)
+            await interaction.response.send_message(
+                f"{theme.deniedIcon} {t('registration.settings.enable_error', _get_lang(interaction))}",
+                ephemeral=True
+            )
             
     @discord.ui.button(
         label="Disable",
@@ -56,9 +76,15 @@ class RegisterSettingsView(discord.ui.View):
     async def disable_register_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
             self.change_settings(False)
-            await interaction.response.send_message(f"{theme.deniedIcon} Registration has been disabled.", ephemeral=True)
+            await interaction.response.send_message(
+                f"{theme.deniedIcon} {t('registration.settings.disabled', _get_lang(interaction))}",
+                ephemeral=True
+            )
         except Exception as _:
-            await interaction.response.send_message(f"{theme.deniedIcon} An error occurred while disabling registration.", ephemeral=True)
+            await interaction.response.send_message(
+                f"{theme.deniedIcon} {t('registration.settings.disable_error', _get_lang(interaction))}",
+                ephemeral=True
+            )
 
 class Register(commands.Cog):
     def __init__(self, bot):
@@ -75,18 +101,19 @@ class Register(commands.Cog):
         self.conn_users.close()
 
     async def show_settings_menu(self, interaction: discord.Interaction):
+        lang = _get_lang(interaction)
         is_admin, is_global = PermissionManager.is_admin(interaction.user.id)
         if not is_admin or not is_global:
             await interaction.response.send_message(
-                f"{theme.deniedIcon} You do not have permission to access this command.",
+                f"{theme.deniedIcon} {t('registration.settings.no_permission', lang)}",
                 ephemeral=True
             )
             return
 
-        view = RegisterSettingsView(self)
+        view = RegisterSettingsView(self, lang)
         
         await interaction.response.send_message(
-            "Choose an option to enable or disable the registration system:",
+            t("registration.settings.prompt", lang),
             view=view,
             ephemeral=True
         )
@@ -158,24 +185,25 @@ class Register(commands.Cog):
          
     @discord.app_commands.command(
         name="register",
-        description="Registers yourself into the bot's database.",
+        description=t("registration.command.desc", "en"),
     )
     @discord.app_commands.describe(
-        fid="Your In-Game ID",
-        alliance="Your Alliance Name"
+        fid=t("registration.command.fid", "en"),
+        alliance=t("registration.command.alliance", "en")
     )
     @discord.app_commands.autocomplete(alliance=alliance_autocomplete)
     async def register(self, interaction: discord.Interaction, fid: int, alliance: int):
+        lang = _get_lang(interaction)
         if not self.is_registration_enabled():
             await interaction.response.send_message(
-                f"{theme.deniedIcon} Registration is currently disabled.",
+                f"{theme.deniedIcon} {t('registration.disabled', lang)}",
                 ephemeral=True
             )
             return
         
         if self.is_already_in_users(fid):
             await interaction.response.send_message(
-                f"{theme.deniedIcon} You are already registered in the bot's database.",
+                f"{theme.deniedIcon} {t('registration.already_registered', lang)}",
                 ephemeral=True
             )
             return
@@ -187,9 +215,9 @@ class Register(commands.Cog):
                 error_msg = api_response.get("msg", "Unknown error")
                 
                 if "role not exist" in error_msg.lower():
-                    display_msg = f"{theme.deniedIcon} Invalid ID. Please try again."
+                    display_msg = f"{theme.deniedIcon} {t('registration.invalid_id', lang)}"
                 else:
-                    display_msg = f"{theme.deniedIcon} Invalid ID: {error_msg}"
+                    display_msg = f"{theme.deniedIcon} {t('registration.invalid_id_detail', lang, error=error_msg)}"
                 
                 await interaction.response.send_message(
                     display_msg,
@@ -199,7 +227,7 @@ class Register(commands.Cog):
             
             if "data" not in api_response:
                 await interaction.response.send_message(
-                    f"{theme.deniedIcon} Invalid response from server. Please try again later.",
+                    f"{theme.deniedIcon} {t('registration.invalid_response', lang)}",
                     ephemeral=True
                 )
                 return
@@ -209,13 +237,13 @@ class Register(commands.Cog):
         except Exception as e:
             if str(e) == "RATE_LIMITED":
                 await interaction.response.send_message(
-                    "⏳ Rate limit reached. Please wait a minute before trying again.",
+                    t("registration.rate_limited", lang),
                     ephemeral=True
                 )
             else:
                 print(f"Error fetching user data for FID {fid}: {e}")
                 await interaction.response.send_message(
-                    f"{theme.deniedIcon} Failed to fetch user data. Please try again later.",
+                    f"{theme.deniedIcon} {t('registration.fetch_error', lang)}",
                     ephemeral=True
                 )
             return
@@ -232,7 +260,10 @@ class Register(commands.Cog):
         
         self.conn_users.commit()    
         
-        await interaction.response.send_message("Registration successful! You are now in the bot's database.", ephemeral=True)
+        await interaction.response.send_message(
+            t("registration.success", lang),
+            ephemeral=True
+        )
         
 async def setup(bot):
     await bot.add_cog(Register(bot))

@@ -6,6 +6,7 @@ import os
 import uuid
 from .permission_handler import PermissionManager
 from .pimp_my_bot import theme
+from i18n import DEFAULT_LANGUAGE, get_guild_language, t
 
 try:
     import matplotlib.pyplot as plt
@@ -51,8 +52,22 @@ EVENT_TYPE_ICONS = {
     "Other": "📋"
 }
 
+EVENT_TYPE_KEYS = {
+    "Foundry": "foundry",
+    "Canyon Clash": "canyon_clash",
+    "Crazy Joe": "crazy_joe",
+    "Bear Trap": "bear_trap",
+    "Castle Battle": "castle_battle",
+    "Frostdragon Tyrant": "frostdragon_tyrant",
+    "Other": "other",
+}
+
 # Event types that support legion selection (Legion 1, Legion 2)
 LEGION_EVENT_TYPES = ["Foundry", "Canyon Clash"]
+
+def _get_lang(interaction: discord.Interaction | None) -> str:
+    guild_id = interaction.guild.id if interaction and interaction.guild else None
+    return get_guild_language(guild_id)
 
 def parse_points(points_str):
     try:
@@ -70,9 +85,21 @@ def parse_points(points_str):
         raise ValueError("Invalid points format")
 
 class AttendanceSettingsView(discord.ui.View):
-    def __init__(self, cog):
+    def __init__(self, cog, lang: str):
         super().__init__(timeout=7200)
         self.cog = cog
+        self._apply_language(lang)
+
+    def _apply_language(self, lang: str) -> None:
+        for item in self.children:
+            if not isinstance(item, discord.ui.Button):
+                continue
+            if item.custom_id == "report_type":
+                item.label = t("attendance.settings.report_type", lang)
+            elif item.custom_id == "sort_order":
+                item.label = t("attendance.settings.sort_order", lang)
+            elif item.custom_id == "back_to_main":
+                item.label = t("language.back", lang)
 
     @discord.ui.button(
         label="Report Type",
@@ -83,21 +110,22 @@ class AttendanceSettingsView(discord.ui.View):
     async def report_type_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Toggle between text and matplotlib reports"""
         try:
+            lang = _get_lang(interaction)
             # Get current setting
             current_setting = await self.cog.get_user_report_preference(interaction.user.id)
             
             # Create selection view
-            select_view = ReportTypeSelectView(self.cog, current_setting)
+            select_view = ReportTypeSelectView(self.cog, current_setting, lang)
             
             embed = discord.Embed(
-                title=f"{theme.chartIcon} Report Type Settings",
+                title=f"{theme.chartIcon} {t('attendance.settings.report_type_title', lang)}",
                 description=(
-                    f"**Current Setting:** {current_setting.title()}\n\n"
-                    "**Available Options:**\n"
-                    "• **Text** - Text-based reports (faster, no requirements)\n"
-                    "• **Matplotlib** - Visual table reports (requires matplotlib)\n\n"
-                    f"**Matplotlib Status:** {theme.verifiedIcon + ' Available' if MATPLOTLIB_AVAILABLE else theme.deniedIcon + ' Not Available'}\n\n"
-                    "Select your preferred report type below:"
+                    f"**{t('attendance.settings.current', lang)}** {t(f'attendance.report_type.{current_setting}', lang)}\n\n"
+                    f"**{t('attendance.settings.available', lang)}**\n"
+                    f"• **{t('attendance.report_type.text', lang)}** - {t('attendance.report_type.text_desc', lang)}\n"
+                    f"• **{t('attendance.report_type.matplotlib', lang)}** - {t('attendance.report_type.matplotlib_desc', lang)}\n\n"
+                    f"**{t('attendance.settings.matplotlib_status', lang)}** {t('attendance.settings.available_status', lang) if MATPLOTLIB_AVAILABLE else t('attendance.settings.unavailable_status', lang)}\n\n"
+                    f"{t('attendance.settings.select_report_type', lang)}"
                 ),
                 color=theme.emColor1
             )
@@ -106,8 +134,8 @@ class AttendanceSettingsView(discord.ui.View):
             
         except Exception as e:
             error_embed = self.cog._create_error_embed(
-                f"{theme.deniedIcon} Error", 
-                "An error occurred while loading settings."
+                f"{theme.deniedIcon} {t('attendance.error.title', lang)}", 
+                t("attendance.error.load_settings", lang)
             )
             await interaction.response.edit_message(embed=error_embed, view=None)
 
@@ -120,27 +148,31 @@ class AttendanceSettingsView(discord.ui.View):
     async def sort_order_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Configure report sort order"""
         try:
+            lang = _get_lang(interaction)
             # Get current setting from attendance_report cog
             report_cog = self.cog.bot.get_cog("AttendanceReport")
             if not report_cog:
-                await interaction.response.send_message(f"{theme.deniedIcon} Attendance report system not available.", ephemeral=True)
+                await interaction.response.send_message(
+                    f"{theme.deniedIcon} {t('attendance.error.report_unavailable', lang)}",
+                    ephemeral=True
+                )
                 return
 
             current_setting = await report_cog.get_user_sort_preference(interaction.user.id)
 
             # Create selection view
-            select_view = ReportSortSelectView(self.cog, report_cog, current_setting)
+            select_view = ReportSortSelectView(self.cog, report_cog, current_setting, lang)
 
             embed = discord.Embed(
-                title=f"{theme.refreshIcon} Sort Order Settings",
+                title=f"{theme.refreshIcon} {t('attendance.settings.sort_order_title', lang)}",
                 description=(
-                    f"**Current Setting:** {self._format_sort_name(current_setting)}\n\n"
-                    "**Available Options:**\n"
-                    "• **By Points** - Highest points first (Present → Absent)\n"
-                    "• **Name A-Z** - Alphabetical order (Present → Absent)\n"
-                    "• **Name A-Z (All)** - Alphabetical order (All Users)\n"
-                    "• **Last Attended First** - Most recent attendance first\n\n"
-                    "Select your preferred sort order below:"
+                    f"**{t('attendance.settings.current', lang)}** {self._format_sort_name(current_setting, lang)}\n\n"
+                    f"**{t('attendance.settings.available', lang)}**\n"
+                    f"• **{t('attendance.sort.by_points', lang)}** - {t('attendance.sort.by_points_desc', lang)}\n"
+                    f"• **{t('attendance.sort.name_az', lang)}** - {t('attendance.sort.name_az_desc', lang)}\n"
+                    f"• **{t('attendance.sort.name_az_all', lang)}** - {t('attendance.sort.name_az_all_desc', lang)}\n"
+                    f"• **{t('attendance.sort.last_attended', lang)}** - {t('attendance.sort.last_attended_desc', lang)}\n\n"
+                    f"{t('attendance.settings.select_sort', lang)}"
                 ),
                 color=theme.emColor1
             )
@@ -149,18 +181,18 @@ class AttendanceSettingsView(discord.ui.View):
 
         except Exception as e:
             error_embed = self.cog._create_error_embed(
-                f"{theme.deniedIcon} Error",
-                "An error occurred while loading settings."
+                f"{theme.deniedIcon} {t('attendance.error.title', lang)}",
+                t("attendance.error.load_settings", lang)
             )
             await interaction.response.edit_message(embed=error_embed, view=None)
 
-    def _format_sort_name(self, sort_type):
+    def _format_sort_name(self, sort_type, lang: str):
         """Format sort type name for display"""
         return {
-            "points_desc": "By Points",
-            "name_asc": "Name A-Z",
-            "name_asc_all": "Name A-Z (All)",
-            "last_attended_first": "Last Attended First"
+            "points_desc": t("attendance.sort.by_points", lang),
+            "name_asc": t("attendance.sort.name_az", lang),
+            "name_asc_all": t("attendance.sort.name_az_all", lang),
+            "last_attended_first": t("attendance.sort.last_attended", lang)
         }.get(sort_type, sort_type)
 
     @discord.ui.button(
@@ -172,10 +204,23 @@ class AttendanceSettingsView(discord.ui.View):
         await self.cog.show_attendance_menu(interaction)
 
 class ReportTypeSelectView(discord.ui.View):
-    def __init__(self, cog, current_setting):
+    def __init__(self, cog, current_setting, lang: str):
         super().__init__(timeout=7200)
         self.cog = cog
         self.current_setting = current_setting
+        self.lang = lang
+        self._apply_language(lang)
+
+    def _apply_language(self, lang: str) -> None:
+        for item in self.children:
+            if not isinstance(item, discord.ui.Button):
+                continue
+            if item.custom_id == "text_reports":
+                item.label = t("attendance.report_type.text", lang)
+            elif item.custom_id == "matplotlib_reports":
+                item.label = t("attendance.report_type.matplotlib", lang)
+            elif item.custom_id == "back_to_settings":
+                item.label = t("language.back", lang)
 
     @discord.ui.button(
         label="Text Reports",
@@ -195,7 +240,7 @@ class ReportTypeSelectView(discord.ui.View):
     async def matplotlib_reports_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not MATPLOTLIB_AVAILABLE:
             await interaction.response.send_message(
-                f"{theme.deniedIcon} Matplotlib is not available on this system.",
+                f"{theme.deniedIcon} {t('attendance.error.matplotlib_unavailable', _get_lang(interaction))}",
                 ephemeral=True
             )
             return
@@ -207,17 +252,18 @@ class ReportTypeSelectView(discord.ui.View):
         custom_id="back_to_settings"
     )
     async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        settings_view = AttendanceSettingsView(self.cog)
+        lang = _get_lang(interaction)
+        settings_view = AttendanceSettingsView(self.cog, lang)
         embed = discord.Embed(
-            title=f"{theme.settingsIcon} Attendance Settings",
+            title=f"{theme.settingsIcon} {t('attendance.settings.title', lang)}",
             description=(
-                f"Configure your attendance system preferences:\n\n"
-                f"**Available Settings**\n"
+                f"{t('attendance.settings.description', lang)}\n\n"
+                f"**{t('attendance.settings.available', lang)}**\n"
                 f"{theme.upperDivider}\n"
-                f"{theme.chartIcon} **Report Type**\n"
-                f"└ Choose between text or visual reports\n\n"
-                f"{theme.refreshIcon} **Sort Order**\n"
-                f"└ Choose how to sort players in the reports\n"
+                f"{theme.chartIcon} **{t('attendance.settings.report_type', lang)}**\n"
+                f"└ {t('attendance.settings.report_type_desc', lang)}\n\n"
+                f"{theme.refreshIcon} **{t('attendance.settings.sort_order', lang)}**\n"
+                f"└ {t('attendance.settings.sort_order_desc', lang)}\n"
                 f"{theme.lowerDivider}"
             ),
             color=theme.emColor1
@@ -227,11 +273,12 @@ class ReportTypeSelectView(discord.ui.View):
     async def set_report_preference(self, interaction: discord.Interaction, preference: str):
         """Set user's report preference"""
         try:
+            lang = _get_lang(interaction)
             await self.cog.set_user_report_preference(interaction.user.id, preference)
             
             embed = discord.Embed(
-                title=f"{theme.verifiedIcon} Settings Updated",
-                description=f"Report type has been set to: **{preference.title()}**",
+                title=f"{theme.verifiedIcon} {t('attendance.settings.updated_title', lang)}",
+                description=t("attendance.settings.updated_description", lang, report_type=t(f"attendance.report_type.{preference}", lang)),
                 color=theme.emColor3
             )
             
@@ -243,17 +290,34 @@ class ReportTypeSelectView(discord.ui.View):
             
         except Exception as e:
             error_embed = self.cog._create_error_embed(
-                f"{theme.deniedIcon} Error", 
-                "Failed to update settings."
+                f"{theme.deniedIcon} {t('attendance.error.title', lang)}", 
+                t("attendance.error.update_settings", lang)
             )
             await interaction.response.edit_message(embed=error_embed, view=None)
 
 class ReportSortSelectView(discord.ui.View):
-    def __init__(self, cog, report_cog, current_setting):
+    def __init__(self, cog, report_cog, current_setting, lang: str):
         super().__init__(timeout=7200)
         self.cog = cog
         self.report_cog = report_cog
         self.current_setting = current_setting
+        self.lang = lang
+        self._apply_language(lang)
+
+    def _apply_language(self, lang: str) -> None:
+        for item in self.children:
+            if not isinstance(item, discord.ui.Button):
+                continue
+            if item.custom_id == "sort_points":
+                item.label = t("attendance.sort.by_points", lang)
+            elif item.custom_id == "sort_name":
+                item.label = t("attendance.sort.name_az", lang)
+            elif item.custom_id == "sort_name_all":
+                item.label = t("attendance.sort.name_az_all", lang)
+            elif item.custom_id == "sort_last_attended":
+                item.label = t("attendance.sort.last_attended", lang)
+            elif item.custom_id == "back_to_settings":
+                item.label = t("language.back", lang)
 
     @discord.ui.button(
         label="By Points",
@@ -297,17 +361,18 @@ class ReportSortSelectView(discord.ui.View):
         custom_id="back_to_settings"
     )
     async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        settings_view = AttendanceSettingsView(self.cog)
+        lang = _get_lang(interaction)
+        settings_view = AttendanceSettingsView(self.cog, lang)
         embed = discord.Embed(
-            title=f"{theme.settingsIcon} Attendance Settings",
+            title=f"{theme.settingsIcon} {t('attendance.settings.title', lang)}",
             description=(
-                f"Configure your attendance system preferences:\n\n"
-                f"**Available Settings**\n"
+                f"{t('attendance.settings.description', lang)}\n\n"
+                f"**{t('attendance.settings.available', lang)}**\n"
                 f"{theme.upperDivider}\n"
-                f"{theme.chartIcon} **Report Type**\n"
-                f"└ Choose between text or visual reports\n\n"
-                f"{theme.refreshIcon} **Sort Order**\n"
-                f"└ Choose how to sort players in the reports\n"
+                f"{theme.chartIcon} **{t('attendance.settings.report_type', lang)}**\n"
+                f"└ {t('attendance.settings.report_type_desc', lang)}\n\n"
+                f"{theme.refreshIcon} **{t('attendance.settings.sort_order', lang)}**\n"
+                f"└ {t('attendance.settings.sort_order_desc', lang)}\n"
                 f"{theme.lowerDivider}"
             ),
             color=theme.emColor1
@@ -317,19 +382,20 @@ class ReportSortSelectView(discord.ui.View):
     async def set_sort_preference(self, interaction: discord.Interaction, preference: str):
         """Set user's sort preference"""
         try:
+            lang = _get_lang(interaction)
             success = await self.report_cog.set_user_sort_preference(interaction.user.id, preference)
 
             if success:
                 sort_name = {
-                    "points_desc": "By Points",
-                    "name_asc": "Name A-Z",
-                    "name_asc_all": "Name A-Z (All)",
-                    "last_attended_first": "Last Attended First"
+                    "points_desc": t("attendance.sort.by_points", lang),
+                    "name_asc": t("attendance.sort.name_az", lang),
+                    "name_asc_all": t("attendance.sort.name_az_all", lang),
+                    "last_attended_first": t("attendance.sort.last_attended", lang)
                 }.get(preference, preference)
 
                 embed = discord.Embed(
-                    title=f"{theme.verifiedIcon} Settings Updated",
-                    description=f"Sort order has been set to: **{sort_name}**",
+                    title=f"{theme.verifiedIcon} {t('attendance.settings.sort_updated_title', lang)}",
+                    description=t("attendance.settings.sort_updated_description", lang, sort_name=sort_name),
                     color=theme.emColor3
                 )
 
@@ -343,19 +409,33 @@ class ReportSortSelectView(discord.ui.View):
 
         except Exception as e:
             error_embed = self.cog._create_error_embed(
-                f"{theme.deniedIcon} Error",
-                "Failed to update settings."
+                f"{theme.deniedIcon} {t('attendance.error.title', lang)}",
+                t("attendance.error.update_settings", lang)
             )
             await interaction.response.edit_message(embed=error_embed, view=None)
 
 class AttendanceView(discord.ui.View):
-    def __init__(self, cog, user_id, guild_id):
+    def __init__(self, cog, user_id, guild_id, lang: str):
         super().__init__(timeout=7200)
         self.cog = cog
         self.user_id = user_id
         self.guild_id = guild_id
         self.admin_result = None
         self.alliances = None
+        self._apply_language(lang)
+
+    def _apply_language(self, lang: str) -> None:
+        for item in self.children:
+            if not isinstance(item, discord.ui.Button):
+                continue
+            if item.custom_id == "mark_attendance":
+                item.label = t("attendance.menu.mark", lang)
+            elif item.custom_id == "view_attendance":
+                item.label = t("attendance.menu.view", lang)
+            elif item.custom_id == "attendance_settings":
+                item.label = t("attendance.menu.settings", lang)
+            elif item.custom_id == "back_to_other_features":
+                item.label = t("language.back", lang)
     
     async def initialize_permissions_and_alliances(self):
         """Initialize permissions and alliances at the view level."""
@@ -366,10 +446,11 @@ class AttendanceView(discord.ui.View):
 
     async def _handle_permission_check(self, interaction):
         """Consolidated permission checking using cached results."""
+        lang = _get_lang(interaction)
         if not self.admin_result:
             error_embed = self.cog._create_error_embed(
-                f"{theme.deniedIcon} Access Denied", 
-                "You do not have permission to use this command."
+                f"{theme.deniedIcon} {t('attendance.error.access_denied', lang)}", 
+                t("attendance.error.no_permission", lang)
             )
             back_view = self.cog._create_back_view(lambda i: self.cog.show_attendance_menu(i))
             await interaction.response.edit_message(embed=error_embed, view=back_view)
@@ -377,8 +458,8 @@ class AttendanceView(discord.ui.View):
             
         if not self.alliances:
             error_embed = self.cog._create_error_embed(
-                f"{theme.deniedIcon} No Alliances Found",
-                "No alliances found for your permissions."
+                f"{theme.deniedIcon} {t('attendance.error.no_alliances_title', lang)}",
+                t("attendance.error.no_alliances_body", lang)
             )
             back_view = self.cog._create_back_view(lambda i: self.cog.show_attendance_menu(i))
             await interaction.response.edit_message(embed=error_embed, view=back_view)
@@ -431,6 +512,7 @@ class AttendanceView(discord.ui.View):
     )
     async def view_attendance_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
+            lang = _get_lang(interaction)
             result = await self._handle_permission_check(interaction)
             if not result:
                 return
@@ -439,11 +521,11 @@ class AttendanceView(discord.ui.View):
 
             # Get alliance member counts with optimized query
             alliances_with_counts = self._get_alliances_with_counts(alliances)
-            view = AllianceSelectView(alliances_with_counts, self.cog, is_marking=False)
+            view = AllianceSelectView(alliances_with_counts, self.cog, is_marking=False, lang=lang)
             
             select_embed = discord.Embed(
-                title=f"{theme.eyesIcon} View Attendance - Alliance Selection",
-                description="Please select an alliance to view attendance records:",
+                title=f"{theme.eyesIcon} {t('attendance.view.title', lang)}",
+                description=t("attendance.view.select_alliance", lang),
                 color=theme.emColor3
             )
             
@@ -451,8 +533,8 @@ class AttendanceView(discord.ui.View):
 
         except Exception as e:
             error_embed = self.cog._create_error_embed(
-                f"{theme.deniedIcon} Error", 
-                "An error occurred while processing your request."
+                f"{theme.deniedIcon} {t('attendance.error.title', lang)}", 
+                t("attendance.error.processing_request", lang)
             )
             await interaction.response.edit_message(embed=error_embed, view=None)
 
@@ -464,29 +546,30 @@ class AttendanceView(discord.ui.View):
     )
     async def settings_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
+            lang = _get_lang(interaction)
             # Check if user has admin permissions
             admin_result = await self.cog._check_admin_permissions(interaction.user.id)
             
             if not admin_result:
                 error_embed = self.cog._create_error_embed(
-                    f"{theme.deniedIcon} Access Denied", 
-                    "You do not have permission to access settings."
+                    f"{theme.deniedIcon} {t('attendance.error.access_denied', lang)}", 
+                    t("attendance.error.settings_permission", lang)
                 )
                 await interaction.response.edit_message(embed=error_embed, view=None)
                 return
 
-            settings_view = AttendanceSettingsView(self.cog)
+            settings_view = AttendanceSettingsView(self.cog, lang)
 
             embed = discord.Embed(
-                title=f"{theme.settingsIcon} Attendance Settings",
+                title=f"{theme.settingsIcon} {t('attendance.settings.title', lang)}",
                 description=(
-                    f"Configure your attendance system preferences:\n\n"
-                    f"**Available Settings**\n"
+                    f"{t('attendance.settings.description', lang)}\n\n"
+                    f"**{t('attendance.settings.available', lang)}**\n"
                     f"{theme.upperDivider}\n"
-                    f"{theme.chartIcon} **Report Type**\n"
-                    f"└ Choose between text or visual reports\n\n"
-                    f"{theme.refreshIcon} **Sort Order**\n"
-                    f"└ Choose how to sort players in the reports\n"
+                    f"{theme.chartIcon} **{t('attendance.settings.report_type', lang)}**\n"
+                    f"└ {t('attendance.settings.report_type_desc', lang)}\n\n"
+                    f"{theme.refreshIcon} **{t('attendance.settings.sort_order', lang)}**\n"
+                    f"└ {t('attendance.settings.sort_order_desc', lang)}\n"
                     f"{theme.lowerDivider}"
                 ),
                 color=theme.emColor1
@@ -496,8 +579,8 @@ class AttendanceView(discord.ui.View):
 
         except Exception as e:
             error_embed = self.cog._create_error_embed(
-                f"{theme.deniedIcon} Error", 
-                "An error occurred while loading settings."
+                f"{theme.deniedIcon} {t('attendance.error.title', lang)}", 
+                t("attendance.error.load_settings", lang)
             )
             await interaction.response.edit_message(embed=error_embed, view=None)
 
@@ -513,13 +596,13 @@ class AttendanceView(discord.ui.View):
                 await other_features_cog.show_other_features_menu(interaction)
         except Exception as e:
             error_embed = self.cog._create_error_embed(
-                f"{theme.deniedIcon} Error",
-                "An error occurred while returning to other features."
+                f"{theme.deniedIcon} {t('attendance.error.title', _get_lang(interaction))}",
+                t("attendance.error.back_other_features", _get_lang(interaction))
             )
             await interaction.response.edit_message(embed=error_embed, view=None)
 
 class EventTypeSelectView(discord.ui.View):
-    def __init__(self, session_data, cog, alliance_id, alliance_name):
+    def __init__(self, session_data, cog, alliance_id, alliance_name, lang: str):
         super().__init__(timeout=1800)
         self.session_data = session_data
         self.cog = cog
@@ -527,6 +610,7 @@ class EventTypeSelectView(discord.ui.View):
         self.alliance_name = alliance_name
         self.selected_event_type = None
         self.selected_legion = None
+        self.lang = lang
 
         # Add the event type dropdown
         self.event_type_select = self.create_event_type_select()
@@ -536,7 +620,12 @@ class EventTypeSelectView(discord.ui.View):
         self.legion_select = None
 
         # Add back button
-        back_button = discord.ui.Button(label="Back", emoji=f"{theme.backIcon}", style=discord.ButtonStyle.secondary, row=2)
+        back_button = discord.ui.Button(
+            label=t("language.back", lang),
+            emoji=f"{theme.backIcon}",
+            style=discord.ButtonStyle.secondary,
+            row=2
+        )
         back_button.callback = self.back_to_sessions
         self.add_item(back_button)
 
@@ -545,10 +634,18 @@ class EventTypeSelectView(discord.ui.View):
         for event_type in EVENT_TYPES:
             emoji = EVENT_TYPE_ICONS.get(event_type, "📋")
             is_default = event_type == "Other"
-            options.append(discord.SelectOption(label=event_type, value=event_type, emoji=emoji, default=is_default))
+            event_key = EVENT_TYPE_KEYS.get(event_type, event_type.lower().replace(" ", "_"))
+            options.append(
+                discord.SelectOption(
+                    label=t(f"attendance.event.{event_key}", self.lang),
+                    value=event_type,
+                    emoji=emoji,
+                    default=is_default
+                )
+            )
 
         select = discord.ui.Select(
-            placeholder=f"{theme.pinIcon} Select Event Type...",
+            placeholder=f"{theme.pinIcon} {t('attendance.event.select_placeholder', self.lang)}",
             options=options,
             row=0
         )
@@ -557,10 +654,10 @@ class EventTypeSelectView(discord.ui.View):
 
     def create_legion_select(self):
         select = discord.ui.Select(
-            placeholder=f"{theme.medalIcon} Select Legion...",
+            placeholder=f"{theme.medalIcon} {t('attendance.event.select_legion_placeholder', self.lang)}",
             options=[
-                discord.SelectOption(label="Legion 1", value="Legion 1", emoji=theme.num1Icon),
-                discord.SelectOption(label="Legion 2", value="Legion 2", emoji=theme.num2Icon)
+                discord.SelectOption(label=t("attendance.event.legion_1", self.lang), value="Legion 1", emoji=theme.num1Icon),
+                discord.SelectOption(label=t("attendance.event.legion_2", self.lang), value="Legion 2", emoji=theme.num2Icon)
             ],
             row=1
         )
@@ -571,6 +668,8 @@ class EventTypeSelectView(discord.ui.View):
         event_type = self.event_type_select.values[0]
         self.selected_event_type = event_type
         self.session_data['event_type'] = event_type
+        event_key = EVENT_TYPE_KEYS.get(event_type, event_type.lower().replace(' ', '_'))
+        event_label = t(f"attendance.event.{event_key}", self.lang)
 
         # Check if this event type requires legion selection
         if event_type in LEGION_EVENT_TYPES:
@@ -581,8 +680,12 @@ class EventTypeSelectView(discord.ui.View):
 
             # Update embed to prompt for legion selection
             embed = discord.Embed(
-                title=f"{theme.medalIcon} Select Legion",
-                description=f"**Event Type:** {EVENT_TYPE_ICONS.get(event_type, '📋')} {event_type}\n\nPlease select the legion for this attendance session:",
+                title=f"{theme.medalIcon} {t('attendance.event.select_legion_title', self.lang)}",
+                description=(
+                    f"**{t('attendance.event.type', self.lang)}** {EVENT_TYPE_ICONS.get(event_type, '📋')}"
+                    f" {event_label}\n\n"
+                    f"{t('attendance.event.select_legion_prompt', self.lang)}"
+                ),
                 color=theme.emColor1
             )
             await interaction.response.edit_message(embed=embed, view=self)
@@ -620,34 +723,36 @@ class EventTypeSelectView(discord.ui.View):
     async def back_to_sessions(self, interaction: discord.Interaction):
         await self.cog.show_session_selection_for_marking(interaction, self.alliance_id)
 
-class SessionNameModal(discord.ui.Modal, title="Attendance Session"):
-    def __init__(self, alliance_id, cog):
-        super().__init__()
+class SessionNameModal(discord.ui.Modal):
+    def __init__(self, alliance_id, cog, lang: str):
+        super().__init__(title=t("attendance.session.title", lang))
         self.alliance_id = alliance_id
         self.cog = cog
+        self.lang = lang
         
         self.session_name = discord.ui.TextInput(
-            label="Session Name",
-            placeholder="Enter a name for this attendance session",
+            label=t("attendance.session.name_label", lang),
+            placeholder=t("attendance.session.name_placeholder", lang),
             required=True,
             max_length=50
         )
         self.add_item(self.session_name)
         
         self.event_date = discord.ui.TextInput(
-            label="Event Date/Time (UTC)",
-            placeholder="YYYY-MM-DD HH:MM (Leave empty for current time)",
+            label=t("attendance.session.date_label", lang),
+            placeholder=t("attendance.session.date_placeholder", lang),
             required=False,
             max_length=16
         )
         self.add_item(self.event_date)
 
     async def on_submit(self, interaction: discord.Interaction):
+        lang = _get_lang(interaction)
         session_name = self.session_name.value.strip()
         if not session_name:
             error_embed = discord.Embed(
-                title=f"{theme.deniedIcon} Error",
-                description="Session name cannot be empty.",
+                title=f"{theme.deniedIcon} {t('attendance.error.title', lang)}",
+                description=t("attendance.session.name_required", lang),
                 color=theme.emColor2
             )
             await interaction.response.edit_message(embed=error_embed, view=None)
@@ -660,8 +765,8 @@ class SessionNameModal(discord.ui.Modal, title="Attendance Session"):
                 event_date = datetime.strptime(self.event_date.value.strip(), "%Y-%m-%d %H:%M")
             except ValueError:
                 error_embed = discord.Embed(
-                    title=f"{theme.deniedIcon} Invalid Date Format",
-                    description="Please use the format: YYYY-MM-DD HH:MM (e.g., 2024-03-15 14:30)",
+                    title=f"{theme.deniedIcon} {t('attendance.session.invalid_date_title', lang)}",
+                    description=t("attendance.session.invalid_date_body", lang),
                     color=theme.emColor2
                 )
                 await interaction.response.edit_message(embed=error_embed, view=None)
@@ -676,17 +781,21 @@ class SessionNameModal(discord.ui.Modal, title="Attendance Session"):
             'event_date': event_date
         }
         
-        event_view = EventTypeSelectView(session_data, self.cog, self.alliance_id, alliance_name)
+        event_view = EventTypeSelectView(session_data, self.cog, self.alliance_id, alliance_name, lang)
         embed = discord.Embed(
-            title=f"{theme.pinIcon} Select Event Type",
-            description=f"**Session:** {session_name}\n**Alliance:** {alliance_name}\n\nPlease select the event type for this attendance session:",
+            title=f"{theme.pinIcon} {t('attendance.event.select_title', lang)}",
+            description=(
+                f"**{t('attendance.session.name_label', lang)}** {session_name}\n"
+                f"**{t('attendance.export.alliance', lang)}** {alliance_name}\n\n"
+                f"{t('attendance.event.select_prompt', lang)}"
+            ),
             color=theme.emColor1
         )
         
         await interaction.response.edit_message(embed=embed, view=event_view)
 
 class AllianceSelectView(discord.ui.View):
-    def __init__(self, alliances_with_counts, cog, page=0, is_marking=False):
+    def __init__(self, alliances_with_counts, cog, page=0, is_marking=False, lang: str | None = None):
         super().__init__(timeout=7200)
         self.alliances = alliances_with_counts
         self.cog = cog
@@ -694,6 +803,7 @@ class AllianceSelectView(discord.ui.View):
         self.max_page = (len(alliances_with_counts) - 1) // 25 if alliances_with_counts else 0
         self.current_select = None
         self.is_marking = is_marking
+        self.lang = lang or DEFAULT_LANGUAGE
         self.update_select_menu()
 
     def update_select_menu(self):
@@ -706,12 +816,20 @@ class AllianceSelectView(discord.ui.View):
         current_alliances = self.alliances[start_idx:end_idx]
 
         select = discord.ui.Select(
-            placeholder=f"{theme.allianceIcon} Select an alliance... (Page {self.page + 1}/{self.max_page + 1})",
+            placeholder=(
+                f"{theme.allianceIcon} "
+                f"{t('attendance.alliance.select_placeholder', self.lang, page=self.page + 1, total_pages=self.max_page + 1)}"
+            ),
             options=[
                 discord.SelectOption(
                     label=f"{name[:50]}",
                     value=str(alliance_id),
-                    description=f"ID: {alliance_id} | Members: {count}",
+                    description=t(
+                        "attendance.alliance.option_desc",
+                        self.lang,
+                        alliance_id=alliance_id,
+                        member_count=count
+                    ),
                     emoji=theme.allianceIcon
                 ) for alliance_id, name, count in current_alliances
             ],
@@ -2250,29 +2368,29 @@ class Attendance(commands.Cog):
         # Check if used in a server context
         if interaction.guild is None:
             await interaction.response.send_message(
-                f"{theme.deniedIcon} This command can only be used in a server, not in DMs.",
+                f"{theme.deniedIcon} {t('attendance.error.guild_only', DEFAULT_LANGUAGE)}",
                 ephemeral=True
             )
             return
-            
+        lang = _get_lang(interaction)
         embed = discord.Embed(
-            title=f"{theme.listIcon} Attendance System",
+            title=f"{theme.listIcon} {t('attendance.menu.title', lang)}",
             description=(
-                f"Please select an operation:\n\n"
-                f"**Available Operations**\n"
+                f"{t('attendance.menu.prompt', lang)}\n\n"
+                f"**{t('attendance.menu.available', lang)}**\n"
                 f"{theme.upperDivider}\n"
-                f"{theme.editListIcon} **Mark Attendance**\n"
-                f"└ Create or modify attendance records\n\n"
-                f"{theme.eyesIcon} **View Attendance**\n"
-                f"└ View attendance records and export reports\n\n"
-                f"{theme.settingsIcon} **Settings**\n"
-                f"└ Configure attendance preferences\n"
+                f"{theme.editListIcon} **{t('attendance.menu.mark', lang)}**\n"
+                f"└ {t('attendance.menu.mark_desc', lang)}\n\n"
+                f"{theme.eyesIcon} **{t('attendance.menu.view', lang)}**\n"
+                f"└ {t('attendance.menu.view_desc', lang)}\n\n"
+                f"{theme.settingsIcon} **{t('attendance.menu.settings', lang)}**\n"
+                f"└ {t('attendance.menu.settings_desc', lang)}\n"
                 f"{theme.lowerDivider}"
             ),
             color=theme.emColor1
         )
         
-        view = AttendanceView(self, interaction.user.id, interaction.guild.id)
+        view = AttendanceView(self, interaction.user.id, interaction.guild.id, lang)
         await view.initialize_permissions_and_alliances()
         
         # Handle both regular and deferred interactions
@@ -2284,11 +2402,12 @@ class Attendance(commands.Cog):
     async def show_alliance_selection_for_marking(self, interaction: discord.Interaction):
         """Show alliance selection specifically for marking attendance"""
         try:
+            lang = _get_lang(interaction)
             # Check if used in a server context
             if interaction.guild is None:
                 error_embed = self._create_error_embed(
-                    f"{theme.deniedIcon} Error",
-                    "This command can only be used in a server, not in DMs."
+                    f"{theme.deniedIcon} {t('attendance.error.title', lang)}",
+                    t("attendance.error.guild_only", lang)
                 )
                 await interaction.response.send_message(embed=error_embed, ephemeral=True)
                 return
@@ -2297,8 +2416,8 @@ class Attendance(commands.Cog):
             is_admin, is_global = PermissionManager.is_admin(interaction.user.id)
             if not is_admin:
                 error_embed = self._create_error_embed(
-                    f"{theme.deniedIcon} Access Denied",
-                    "You do not have permission to use this command."
+                    f"{theme.deniedIcon} {t('attendance.error.access_denied', lang)}",
+                    t("attendance.error.no_permission", lang)
                 )
                 back_view = self._create_back_view(lambda i: self.show_attendance_menu(i))
                 await interaction.response.edit_message(embed=error_embed, view=back_view)
@@ -2311,8 +2430,8 @@ class Attendance(commands.Cog):
 
             if not alliances:
                 error_embed = self._create_error_embed(
-                    f"{theme.deniedIcon} No Alliances Found",
-                    "No alliances found for your permissions."
+                    f"{theme.deniedIcon} {t('attendance.error.no_alliances_title', lang)}",
+                    t("attendance.error.no_alliances_body", lang)
                 )
                 back_view = self._create_back_view(lambda i: self.show_attendance_menu(i))
                 await interaction.response.edit_message(embed=error_embed, view=back_view)
@@ -2320,14 +2439,14 @@ class Attendance(commands.Cog):
             
             # Create alliance selection embed
             select_embed = discord.Embed(
-                title=f"{theme.listIcon} Attendance - Alliance Selection",
+                title=f"{theme.listIcon} {t('attendance.mark.title', lang)}",
                 description=(
-                    f"Please select an alliance to mark attendance:\n\n"
-                    f"**Permission Details**\n"
+                    f"{t('attendance.mark.select_alliance', lang)}\n\n"
+                    f"**{t('attendance.permissions.title', lang)}**\n"
                     f"{theme.upperDivider}\n"
-                    f"{theme.userIcon} **Access Level:** `{'Global Admin' if is_global else 'Alliance Admin'}`\n"
-                    f"{theme.searchIcon} **Access Type:** `{'All Alliances' if is_global else 'Assigned Alliances'}`\n"
-                    f"{theme.chartIcon} **Available Alliances:** `{len(alliances)}`\n"
+                    f"{theme.userIcon} **{t('attendance.permissions.level', lang)}** `{t('attendance.permissions.global_admin', lang) if is_global else t('attendance.permissions.alliance_admin', lang)}`\n"
+                    f"{theme.searchIcon} **{t('attendance.permissions.type', lang)}** `{t('attendance.permissions.all_alliances', lang) if is_global else t('attendance.permissions.assigned_alliances', lang)}`\n"
+                    f"{theme.chartIcon} **{t('attendance.permissions.available_alliances', lang)}** `{len(alliances)}`\n"
                     f"{theme.lowerDivider}"
                 ),
                 color=theme.emColor1
@@ -2354,19 +2473,20 @@ class Attendance(commands.Cog):
                     for aid, name in alliances
                 ]
             
-            view = AllianceSelectView(alliances_with_counts, self, is_marking=True)
+            view = AllianceSelectView(alliances_with_counts, self, is_marking=True, lang=lang)
             await interaction.response.edit_message(embed=select_embed, view=view)
             
         except Exception as e:
             error_embed = self._create_error_embed(
-                f"{theme.deniedIcon} Error", 
-                "An error occurred while showing alliance selection."
+                f"{theme.deniedIcon} {t('attendance.error.title', lang)}", 
+                t("attendance.error.select_alliance_error", lang)
             )
             await interaction.response.edit_message(embed=error_embed, view=None)
 
     async def show_session_selection_for_marking(self, interaction: discord.Interaction, alliance_id: int):
         """Show available sessions for marking/editing attendance"""
         try:
+            lang = _get_lang(interaction)
             # Get alliance name
             alliance_name = await self._get_alliance_name(alliance_id)
 
@@ -2397,7 +2517,7 @@ class Attendance(commands.Cog):
                         'name': row[1],
                         'event_type': row[2],
                         'event_subtype': row[3],
-                        'date': row[4].split('T')[0] if row[4] else "Unknown",
+                        'date': row[4].split('T')[0] if row[4] else t("attendance.session.unknown_date", lang),
                         'player_count': row[5],
                         'marked_count': row[6]
                     }
@@ -2407,31 +2527,31 @@ class Attendance(commands.Cog):
             # Create session selection view with new session option
             if sessions:
                 description = (
-                    "Please select an existing session or create a new one:\n\n"
-                    f"**Alliance:** {alliance_name}\n"
-                    f"**Available Sessions:** {len(sessions)}\n\n"
-                    "Sessions are sorted by date (newest first)."
+                    f"{t('attendance.session.select_or_create', lang)}\n\n"
+                    f"**{t('attendance.export.alliance', lang)}** {alliance_name}\n"
+                    f"**{t('attendance.session.available', lang)}** {len(sessions)}\n\n"
+                    f"{t('attendance.session.sorted_newest', lang)}"
                 )
             else:
                 description = (
-                    f"**Alliance:** {alliance_name}\n"
-                    f"**Available Sessions:** No sessions found\n\n"
-                    "Click the **New Session** button below to create your first attendance session for this alliance."
+                    f"**{t('attendance.export.alliance', lang)}** {alliance_name}\n"
+                    f"**{t('attendance.session.available', lang)}** {t('attendance.session.none', lang)}\n\n"
+                    f"{t('attendance.session.create_first', lang)}"
                 )
             
             embed = discord.Embed(
-                title=f"{theme.editListIcon} Mark Attendance - {alliance_name}",
+                title=f"{theme.editListIcon} {t('attendance.mark.title_short', lang)} - {alliance_name}",
                 description=description,
                 color=theme.emColor1
             )
 
-            view = SessionSelectView(sessions, alliance_id, self, is_viewing=False)
+            view = SessionSelectView(sessions, alliance_id, self, is_viewing=False, lang=lang)
             await interaction.response.edit_message(embed=embed, view=view)
 
         except Exception as e:
             error_embed = self._create_error_embed(
-                f"{theme.deniedIcon} Error",
-                "An error occurred while loading sessions."
+                f"{theme.deniedIcon} {t('attendance.error.title', lang)}",
+                t("attendance.session.load_error", lang)
             )
             await interaction.response.edit_message(embed=error_embed, view=None)
 
@@ -2701,12 +2821,13 @@ class Attendance(commands.Cog):
 
 class SessionSelectView(discord.ui.View):
     """Unified session select view for both marking and viewing"""
-    def __init__(self, sessions, alliance_id, cog, is_viewing=False):
+    def __init__(self, sessions, alliance_id, cog, is_viewing=False, lang: str | None = None):
         super().__init__(timeout=7200)
         self.sessions = sessions
         self.alliance_id = alliance_id
         self.cog = cog
         self.is_viewing = is_viewing
+        self.lang = lang or DEFAULT_LANGUAGE
  
         # Add dropdown for session selection only if there are sessions
         if sessions:
@@ -2715,15 +2836,27 @@ class SessionSelectView(discord.ui.View):
                 event_icon = EVENT_TYPE_ICONS.get(session.get('event_type', 'Other'), '📋')
                 event_subtype = session.get('event_subtype')
                 legion_suffix = f" [L{event_subtype[-1]}]" if event_subtype else ""
+                event_type = session.get('event_type', 'Other')
+                event_key = EVENT_TYPE_KEYS.get(event_type, event_type.lower().replace(" ", "_"))
+                event_label = t(f"attendance.event.{event_key}", self.lang)
+                date_label = session.get('date') or t("attendance.session.unknown_date", self.lang)
+                marked_count = session.get('marked_count', 0)
+                player_count = session.get('player_count', 0)
                 options.append(discord.SelectOption(
-                    label=f"{session['name'][:85]}{legion_suffix} [{session.get('event_type', 'Other')}]",
+                    label=f"{session['name'][:85]}{legion_suffix} [{event_label}]",
                     value=str(session['session_id']),
-                    description=f"{session.get('date', 'Unknown date')} - {session.get('marked_count', 0)}/{session.get('player_count', 0)} marked",
+                    description=t(
+                        "attendance.session.option_desc",
+                        self.lang,
+                        date=date_label,
+                        marked=marked_count,
+                        total=player_count
+                    ),
                     emoji=event_icon
                 ))
             
             select = discord.ui.Select(
-                placeholder=f"{theme.listIcon} Select a session...",
+                placeholder=f"{theme.listIcon} {t('attendance.session.select_placeholder', self.lang)}",
                 options=options
             )
             select.callback = lambda interaction: self.on_select(interaction)
@@ -2732,7 +2865,7 @@ class SessionSelectView(discord.ui.View):
         # New Session button (only for marking mode)
         if not self.is_viewing:
             new_session_button = discord.ui.Button(
-                label="New Session",
+                label=t("attendance.session.new", self.lang),
                 style=discord.ButtonStyle.primary,
                 emoji=theme.addIcon,
                 row=1
@@ -2742,7 +2875,8 @@ class SessionSelectView(discord.ui.View):
         
         # Back button (always shown)
         back_button = discord.ui.Button(
-            label="Back", emoji=f"{theme.backIcon}",
+            label=t("language.back", self.lang),
+            emoji=f"{theme.backIcon}",
             style=discord.ButtonStyle.secondary,
             row=1
         )
@@ -2751,7 +2885,7 @@ class SessionSelectView(discord.ui.View):
     
     async def new_session_callback(self, interaction: discord.Interaction):
         """Create a new session"""
-        await interaction.response.send_modal(SessionNameModal(self.cog, self.alliance_id))
+        await interaction.response.send_modal(SessionNameModal(self.cog, self.alliance_id, _get_lang(interaction)))
 
     async def back_button_callback(self, interaction: discord.Interaction):
         """Go back to appropriate menu"""
@@ -2802,26 +2936,27 @@ class SessionSelectView(discord.ui.View):
                     )
             else:
                 await interaction.edit_original_response(
-                    content=f"{theme.deniedIcon} Session not found.",
+                    content=f"{theme.deniedIcon} {t('attendance.session.not_found', self.lang)}",
                     embed=None,
                     view=None
                 )
         except Exception as e:
             await interaction.edit_original_response(
-                content=f"{theme.deniedIcon} An error occurred while loading the session.",
+                content=f"{theme.deniedIcon} {t('attendance.session.load_error', self.lang)}",
                 embed=None,
                 view=None
             )
 
 class SessionNameModal(discord.ui.Modal):
-    def __init__(self, cog, alliance_id):
-        super().__init__(title="Create New Session")
+    def __init__(self, cog, alliance_id, lang: str):
+        super().__init__(title=t("attendance.session.new_title", lang))
         self.cog = cog
         self.alliance_id = alliance_id
+        self.lang = lang
         
         self.session_name = discord.ui.TextInput(
-            label="Session Name",
-            placeholder="Enter session name (e.g., 'Bear Tuesday', 'Canyon Sunday')",
+            label=t("attendance.session.name_label", lang),
+            placeholder=t("attendance.session.name_placeholder_marking", lang),
             min_length=1,
             max_length=100,
             required=True

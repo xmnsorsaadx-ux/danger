@@ -24,6 +24,11 @@ from .gift_operationsapi import GiftCodeAPI
 from .gift_captchasolver import GiftCaptchaSolver
 from collections import deque
 from .pimp_my_bot import theme
+from i18n import get_guild_language, t
+
+def _get_lang(interaction: discord.Interaction | None) -> str:
+    guild_id = interaction.guild.id if interaction and interaction.guild else None
+    return get_guild_language(guild_id)
 
 class GiftOperations(commands.Cog):
     def __init__(self, bot):
@@ -330,6 +335,9 @@ class GiftOperations(commands.Cog):
                     self.alliance_cursor.execute("SELECT name FROM alliance_list WHERE alliance_id = ?", (alliance_id,))
                     alliance_result = self.alliance_cursor.fetchone()
                     alliance_name = alliance_result[0] if alliance_result else f"Alliance {alliance_id}"
+                    lang = _get_lang(interaction) if interaction else get_guild_language(
+                        channel.guild.id if channel and channel.guild else None
+                    )
 
                     # Handle batch progress update
                     if batch_id and batch_id in self.redemption_batches:
@@ -341,9 +349,13 @@ class GiftOperations(commands.Cog):
                     progress_message = None
                     if interaction and not batch_id:
                         start_embed = discord.Embed(
-                            title=f"{theme.refreshIcon} Processing Redemption",
-                            description=f"Starting gift code redemption for **{alliance_name}**...\n"
-                                       f"**Gift Code:** `{giftcode}`",
+                            title=f"{theme.refreshIcon} {t('gift.redeem.process_title', lang)}",
+                            description=t(
+                                "gift.redeem.process_desc",
+                                lang,
+                                alliance=alliance_name,
+                                code=giftcode
+                            ),
                             color=theme.emColor1
                         )
                         progress_message = await interaction.followup.send(embed=start_embed, ephemeral=True)
@@ -376,9 +388,13 @@ class GiftOperations(commands.Cog):
                     # Update the message with completion status if we have a message to update (non-batch)
                     elif interaction and progress_message:
                         complete_embed = discord.Embed(
-                            title=f"{theme.verifiedIcon} Redemption Complete",
-                            description=f"Gift code redemption completed for **{alliance_name}**.\n"
-                                       f"**Gift Code:** `{giftcode}`",
+                            title=f"{theme.verifiedIcon} {t('gift.redeem.complete_title', lang)}",
+                            description=t(
+                                "gift.redeem.complete_desc",
+                                lang,
+                                alliance=alliance_name,
+                                code=giftcode
+                            ),
                             color=theme.emColor3
                         )
                         try:
@@ -410,8 +426,13 @@ class GiftOperations(commands.Cog):
 
                     elif interaction:
                         error_embed = discord.Embed(
-                            title=f"{theme.deniedIcon} Redemption Error",
-                            description=f"An error occurred during redemption for **{alliance_name}**: {str(e)}",
+                            title=f"{theme.deniedIcon} {t('gift.redeem.error_title', lang)}",
+                            description=t(
+                                "gift.redeem.error_desc",
+                                lang,
+                                alliance=alliance_name,
+                                error=str(e)
+                            ),
                             color=theme.emColor2
                         )
                         if progress_message:
@@ -434,9 +455,14 @@ class GiftOperations(commands.Cog):
         # Show processing message if from channel
         processing_message = None
         if message and channel:
+            lang = get_guild_language(message.guild.id if message.guild else None)
             processing_embed = discord.Embed(
-                title=f"{theme.refreshIcon} Processing Gift Code...",
-                description=f"Validating `{giftcode}` (Position in queue: Processing now)",
+                title=f"{theme.refreshIcon} {t('gift.validation.processing_title', lang)}",
+                description=t(
+                    "gift.validation.processing_desc",
+                    lang,
+                    code=giftcode
+                ),
                 color=theme.emColor1
             )
             processing_message = await channel.send(embed=processing_embed)
@@ -454,12 +480,16 @@ class GiftOperations(commands.Cog):
     
     async def _send_existing_code_response(self, message, giftcode, channel):
         """Send response for existing gift code."""
-        reply_embed = discord.Embed(title=f"{theme.infoIcon} Gift Code Already Known", color=theme.emColor1)
+        lang = get_guild_language(message.guild.id if message and message.guild else None)
+        reply_embed = discord.Embed(
+            title=f"{theme.infoIcon} {t('gift.validation.exists_title', lang)}",
+            color=theme.emColor1
+        )
         reply_embed.description = (
-            f"**Gift Code Details**\n{theme.upperDivider}\n"
-            f"{theme.userIcon} **Sender:** {message.author.mention}\n"
-            f"{theme.giftIcon} **Gift Code:** `{giftcode}`\n"
-            f"{theme.editListIcon} **Status:** Already in database.\n"
+            f"**{t('gift.common.details_title', lang)}**\n{theme.upperDivider}\n"
+            f"{theme.userIcon} **{t('gift.validation.sender_label', lang)}** {message.author.mention}\n"
+            f"{theme.giftIcon} **{t('gift.common.gift_code_label', lang)}** `{giftcode}`\n"
+            f"{theme.editListIcon} **{t('gift.common.status_label', lang)}** {t('gift.validation.exists_status', lang)}\n"
             f"{theme.lowerDivider}\n"
         )
         await channel.send(embed=reply_embed)
@@ -471,35 +501,45 @@ class GiftOperations(commands.Cog):
     
     async def _send_validation_response(self, message, giftcode, is_valid, validation_msg, processing_message=None):
         """Send validation response to channel."""
+        lang = get_guild_language(message.guild.id if message and message.guild else None)
         if is_valid:
-            reply_embed = discord.Embed(title=f"{theme.verifiedIcon} Gift Code Validated", color=theme.emColor3)
+            reply_embed = discord.Embed(
+                title=f"{theme.verifiedIcon} {t('gift.validation.validated_title', lang)}",
+                color=theme.emColor3
+            )
             reply_embed.description = (
-                f"**Gift Code Details**\n{theme.upperDivider}\n"
-                f"{theme.userIcon} **Sender:** {message.author.mention}\n"
-                f"{theme.giftIcon} **Gift Code:** `{giftcode}`\n"
-                f"{theme.verifiedIcon} **Status:** {validation_msg}\n"
+                f"**{t('gift.common.details_title', lang)}**\n{theme.upperDivider}\n"
+                f"{theme.userIcon} **{t('gift.validation.sender_label', lang)}** {message.author.mention}\n"
+                f"{theme.giftIcon} **{t('gift.common.gift_code_label', lang)}** `{giftcode}`\n"
+                f"{theme.verifiedIcon} **{t('gift.common.status_label', lang)}** {validation_msg}\n"
                 f"{theme.lowerDivider}\n"
             )
             reaction = f"{theme.verifiedIcon}"
         elif is_valid is False:
-            reply_embed = discord.Embed(title=f"{theme.deniedIcon} Invalid Gift Code", color=theme.emColor2)
+            reply_embed = discord.Embed(
+                title=f"{theme.deniedIcon} {t('gift.validation.invalid_title', lang)}",
+                color=theme.emColor2
+            )
             reply_embed.description = (
-                f"**Gift Code Details**\n{theme.upperDivider}\n"
-                f"{theme.userIcon} **Sender:** {message.author.mention}\n"
-                f"{theme.giftIcon} **Gift Code:** `{giftcode}`\n"
-                f"{theme.deniedIcon} **Status:** {validation_msg}\n"
-                f"{theme.editListIcon} **Action:** Code not added to database\n"
+                f"**{t('gift.common.details_title', lang)}**\n{theme.upperDivider}\n"
+                f"{theme.userIcon} **{t('gift.validation.sender_label', lang)}** {message.author.mention}\n"
+                f"{theme.giftIcon} **{t('gift.common.gift_code_label', lang)}** `{giftcode}`\n"
+                f"{theme.deniedIcon} **{t('gift.common.status_label', lang)}** {validation_msg}\n"
+                f"{theme.editListIcon} **{t('gift.common.action_label', lang)}** {t('gift.validation.action_not_added', lang)}\n"
                 f"{theme.lowerDivider}\n"
             )
             reaction = f"{theme.deniedIcon}"
         else:
-            reply_embed = discord.Embed(title=f"{theme.warnIcon} Gift Code Added (Pending)", color=discord.Color.yellow())
+            reply_embed = discord.Embed(
+                title=f"{theme.warnIcon} {t('gift.validation.pending_title', lang)}",
+                color=discord.Color.yellow()
+            )
             reply_embed.description = (
-                f"**Gift Code Details**\n{theme.upperDivider}\n"
-                f"{theme.userIcon} **Sender:** {message.author.mention}\n"
-                f"{theme.giftIcon} **Gift Code:** `{giftcode}`\n"
-                f"{theme.warnIcon} **Status:** {validation_msg}\n"
-                f"{theme.editListIcon} **Action:** Added for later validation\n"
+                f"**{t('gift.common.details_title', lang)}**\n{theme.upperDivider}\n"
+                f"{theme.userIcon} **{t('gift.validation.sender_label', lang)}** {message.author.mention}\n"
+                f"{theme.giftIcon} **{t('gift.common.gift_code_label', lang)}** `{giftcode}`\n"
+                f"{theme.warnIcon} **{t('gift.common.status_label', lang)}** {validation_msg}\n"
+                f"{theme.editListIcon} **{t('gift.common.action_label', lang)}** {t('gift.validation.action_pending', lang)}\n"
                 f"{theme.lowerDivider}\n"
             )
             reaction = theme.warnIcon
@@ -573,6 +613,7 @@ class GiftOperations(commands.Cog):
         if total_redemptions > 1 and interaction:
             import uuid
             batch_id = str(uuid.uuid4())
+            lang = _get_lang(interaction)
 
             # Get alliance names for the batch
             alliances_info = {}
@@ -583,7 +624,7 @@ class GiftOperations(commands.Cog):
                 alliances_info[aid] = {'name': name, 'status': 'pending', 'codes_completed': 0}
 
             # Send initial consolidated progress message
-            embed = self._build_batch_progress_embed(giftcodes, alliances_info)
+            embed = self._build_batch_progress_embed(giftcodes, alliances_info, lang=lang)
             progress_message = await interaction.followup.send(embed=embed, ephemeral=True)
 
             # Store batch info
@@ -591,7 +632,8 @@ class GiftOperations(commands.Cog):
                 'message': progress_message,
                 'alliances': alliances_info,
                 'giftcodes': giftcodes,
-                'total_codes': len(giftcodes)
+                'total_codes': len(giftcodes),
+                'lang': lang
             }
 
         # Queue order: Alliance 1 -> all codes, then Alliance 2 -> all codes, etc.
@@ -611,8 +653,9 @@ class GiftOperations(commands.Cog):
 
         return queue_positions
 
-    def _build_batch_progress_embed(self, giftcodes, alliances_info, total_codes=None):
+    def _build_batch_progress_embed(self, giftcodes, alliances_info, total_codes=None, lang: str | None = None):
         """Build the consolidated progress embed for batch redemption."""
+        lang = lang or get_guild_language(None)
         # Handle both single code (string) and multiple codes (list)
         if isinstance(giftcodes, str):
             giftcodes = [giftcodes]
@@ -638,7 +681,10 @@ class GiftOperations(commands.Cog):
 
             # Show code progress for multi-code batches
             if total_codes > 1:
-                lines.append(f"{icon} **{info['name']}** ({codes_completed}/{total_codes} codes)")
+                codes_label = t("gift.batch.codes_label_plural", lang)
+                lines.append(
+                    f"{icon} **{info['name']}** ({codes_completed}/{total_codes} {codes_label})"
+                )
             else:
                 lines.append(f"{icon} **{info['name']}**")
 
@@ -647,13 +693,19 @@ class GiftOperations(commands.Cog):
 
         # Build description based on single or multiple codes
         if total_codes > 1:
-            code_display = f"ALL ({total_codes} codes)"
+            code_display = t("gift.batch.code_all_display", lang, count=total_codes)
+            codes_label = t("gift.batch.codes_label_plural", lang)
         else:
             code_display = f"`{giftcodes[0]}`"
+            codes_label = t("gift.batch.codes_label_singular", lang)
 
         embed = discord.Embed(
-            title=f"{theme.giftIcon} Batch Redemption Progress",
-            description=f"**Gift Code{'s' if total_codes > 1 else ''}:** {code_display}\n**Progress:** {completed_alliances}/{total_alliances} alliances\n\n" + "\n".join(lines),
+            title=f"{theme.giftIcon} {t('gift.batch.title', lang)}",
+            description=(
+                f"**{codes_label}:** {code_display}\n"
+                f"**{t('gift.batch.progress_label', lang)}** {completed_alliances}/{total_alliances} {t('gift.batch.alliances_label', lang)}\n\n"
+                + "\n".join(lines)
+            ),
             color=theme.emColor3 if completed_alliances == total_alliances else discord.Color.blue()
         )
         return embed
@@ -666,7 +718,12 @@ class GiftOperations(commands.Cog):
         batch = self.redemption_batches[batch_id]
         giftcodes = batch.get('giftcodes', batch.get('giftcode', []))
         total_codes = batch.get('total_codes', 1)
-        embed = self._build_batch_progress_embed(giftcodes, batch['alliances'], total_codes)
+        embed = self._build_batch_progress_embed(
+            giftcodes,
+            batch['alliances'],
+            total_codes,
+            batch.get('lang')
+        )
 
         try:
             await batch['message'].edit(embed=embed)
@@ -2040,11 +2097,12 @@ class GiftOperations(commands.Cog):
     async def show_ocr_settings(self, interaction: discord.Interaction):
             """Show OCR settings menu."""
             try:
+                lang = _get_lang(interaction)
                 self.settings_cursor.execute("SELECT is_initial FROM admin WHERE id = ?", (interaction.user.id,))
                 admin_info = self.settings_cursor.fetchone()
 
                 if not admin_info or admin_info[0] != 1:
-                    error_msg = f"{theme.deniedIcon} Only global administrators can access OCR settings."
+                    error_msg = f"{theme.deniedIcon} {t('gift.ocr.admin_only', lang)}"
                     if interaction.response.is_done():
                         await interaction.followup.send(error_msg, ephemeral=True)
                     else:
@@ -2064,16 +2122,16 @@ class GiftOperations(commands.Cog):
                 current_test_fid = self.get_test_fid()
 
                 onnx_available = False
-                solver_status_msg = "N/A"
+                solver_status_msg = t("gift.common.na", lang)
                 if self.captcha_solver:
                     if self.captcha_solver.is_initialized:
                         onnx_available = True
-                        solver_status_msg = "Initialized & Ready"
+                        solver_status_msg = t("gift.ocr.status.ready", lang)
                     elif hasattr(self.captcha_solver, 'is_initialized'):
                         onnx_available = True
-                        solver_status_msg = "Initialization Failed (Check Logs)"
+                        solver_status_msg = t("gift.ocr.status.init_failed", lang)
                     else:
-                        solver_status_msg = "Error (Instance missing flags)"
+                        solver_status_msg = t("gift.ocr.status.instance_error", lang)
                 else:
                     try:
                         # Suppress ONNX C++ GPU warning (writes to fd 2, not sys.stderr)
@@ -2083,27 +2141,44 @@ class GiftOperations(commands.Cog):
                         import onnxruntime
                         _os.dup2(_bak, _fd); _os.close(_bak)
                         onnx_available = True
-                        solver_status_msg = "Disabled or Init Failed"
+                        solver_status_msg = t("gift.ocr.status.disabled_or_failed", lang)
                     except ImportError:
                         onnx_available = False
-                        solver_status_msg = "onnxruntime library missing"
+                        solver_status_msg = t("gift.ocr.status.missing_lib", lang)
 
                 save_options_text = {
-                    0: f"{theme.deniedIcon} None", 1: f"{theme.warnIcon} Failed Only", 2: f"{theme.verifiedIcon} Success Only", 3: f"{theme.saveIcon} All"
+                    0: f"{theme.deniedIcon} {t('gift.ocr.save.none', lang)}",
+                    1: f"{theme.warnIcon} {t('gift.ocr.save.failed_only', lang)}",
+                    2: f"{theme.verifiedIcon} {t('gift.ocr.save.success_only', lang)}",
+                    3: f"{theme.saveIcon} {t('gift.ocr.save.all', lang)}"
                 }
-                save_images_display = save_options_text.get(save_images_setting, f"Unknown ({save_images_setting})")
+                save_images_display = save_options_text.get(
+                    save_images_setting,
+                    t("gift.ocr.save.unknown", lang, value=save_images_setting)
+                )
+
+                ocr_enabled_text = (
+                    f"{theme.verifiedIcon} {t('gift.common.yes', lang)}"
+                    if enabled == 1
+                    else f"{theme.deniedIcon} {t('gift.common.no', lang)}"
+                )
+                onnx_runtime_text = (
+                    f"{theme.verifiedIcon} {t('gift.ocr.onnx_found', lang)}"
+                    if onnx_available
+                    else f"{theme.deniedIcon} {t('gift.ocr.onnx_missing', lang)}"
+                )
 
                 embed = discord.Embed(
-                    title=f"{theme.searchIcon} CAPTCHA Solver Settings (ONNX)",
+                    title=f"{theme.searchIcon} {t('gift.ocr.title', lang)}",
                     description=(
-                        f"Configure the automatic CAPTCHA solver for gift code redemption.\n\n"
-                        f"**Current Settings**\n"
+                        f"{t('gift.ocr.description', lang)}\n\n"
+                        f"**{t('gift.ocr.current_settings', lang)}**\n"
                         f"{theme.upperDivider}\n"
-                        f"{theme.robotIcon} **OCR Enabled:** {f'{theme.verifiedIcon} Yes' if enabled == 1 else f'{theme.deniedIcon} No'}\n"
-                        f"{theme.saveIcon} **Save CAPTCHA Images:** {save_images_display}\n"
-                        f"{theme.fidIcon} **Test ID:** `{current_test_fid}`\n"
-                        f"{theme.giftIcon} **ONNX Runtime:** {f'{theme.verifiedIcon} Found' if onnx_available else f'{theme.deniedIcon} Missing'}\n"
-                        f"{theme.settingsIcon} **Solver Status:** `{solver_status_msg}`\n"
+                        f"{theme.robotIcon} **{t('gift.ocr.ocr_enabled', lang)}** {ocr_enabled_text}\n"
+                        f"{theme.saveIcon} **{t('gift.ocr.save_images', lang)}** {save_images_display}\n"
+                        f"{theme.fidIcon} **{t('gift.ocr.test_id', lang)}** `{current_test_fid}`\n"
+                        f"{theme.giftIcon} **{t('gift.ocr.onnx_runtime', lang)}** {onnx_runtime_text}\n"
+                        f"{theme.settingsIcon} **{t('gift.ocr.solver_status', lang)}** `{solver_status_msg}`\n"
                         f"{theme.lowerDivider}\n"
                     ),
                     color=theme.emColor1
@@ -2111,52 +2186,53 @@ class GiftOperations(commands.Cog):
 
                 if not onnx_available:
                     embed.add_field(
-                        name=f"{theme.warnIcon} Missing Library",
-                        value=(
-                            "ONNX Runtime and required libraries are needed for CAPTCHA solving.\n"
-                            "The model files must be in the bot/models/ directory.\n"
-                            "Try installing dependencies:\n"
-                            "```pip install onnxruntime pillow numpy\n"
-                        ), inline=False
+                        name=f"{theme.warnIcon} {t('gift.ocr.missing_library_title', lang)}",
+                        value=t("gift.ocr.missing_library_body", lang),
+                        inline=False
                     )
 
                 stats_lines = []
-                stats_lines.append("**Captcha Solver (Raw Format):**")
+                stats_lines.append(f"**{t('gift.ocr.stats.solver_title', lang)}**")
                 ocr_calls = self.processing_stats['ocr_solver_calls']
                 ocr_valid = self.processing_stats['ocr_valid_format']
                 ocr_format_rate = (ocr_valid / ocr_calls * 100) if ocr_calls > 0 else 0
-                stats_lines.append(f"• Solver Calls: `{ocr_calls}`")
-                stats_lines.append(f"• Valid Format Returns: `{ocr_valid}` ({ocr_format_rate:.1f}%)")
+                stats_lines.append(t("gift.ocr.stats.solver_calls", lang, count=ocr_calls))
+                stats_lines.append(t("gift.ocr.stats.valid_format", lang, count=ocr_valid, rate=f"{ocr_format_rate:.1f}"))
 
-                stats_lines.append("\n**Redemption Process (Server Side):**")
+                stats_lines.append(f"\n**{t('gift.ocr.stats.redemption_title', lang)}**")
                 submissions = self.processing_stats['captcha_submissions']
                 server_success = self.processing_stats['server_validation_success']
                 server_fail = self.processing_stats['server_validation_failure']
                 total_server_val = server_success + server_fail
                 server_pass_rate = (server_success / total_server_val * 100) if total_server_val > 0 else 0
-                stats_lines.append(f"• Captcha Submissions: `{submissions}`")
-                stats_lines.append(f"• Server Validation Success: `{server_success}`")
-                stats_lines.append(f"• Server Validation Failure: `{server_fail}`")
-                stats_lines.append(f"• Server Pass Rate: `{server_pass_rate:.1f}%`")
+                stats_lines.append(t("gift.ocr.stats.captcha_submissions", lang, count=submissions))
+                stats_lines.append(t("gift.ocr.stats.server_success", lang, count=server_success))
+                stats_lines.append(t("gift.ocr.stats.server_failure", lang, count=server_fail))
+                stats_lines.append(t("gift.ocr.stats.server_pass_rate", lang, rate=f"{server_pass_rate:.1f}"))
 
                 total_fids = self.processing_stats['total_fids_processed']
                 total_time = self.processing_stats['total_processing_time']
                 avg_time = (total_time / total_fids if total_fids > 0 else 0)
-                stats_lines.append(f"• Avg. ID Processing Time: `{avg_time:.2f}s` (over `{total_fids}` IDs)")
+                stats_lines.append(t(
+                    "gift.ocr.stats.avg_processing",
+                    lang,
+                    seconds=f"{avg_time:.2f}",
+                    total=total_fids
+                ))
 
                 embed.add_field(
-                    name=f"{theme.chartIcon} Processing Statistics (Since Bot Start)",
+                    name=f"{theme.chartIcon} {t('gift.ocr.stats.title', lang)}",
                     value="\n".join(stats_lines),
                     inline=False
                 )
 
                 embed.add_field(
-                    name=f"{theme.warnIcon} Important Note",
-                    value="Saving images (especially 'All') can consume significant disk space over time.",
+                    name=f"{theme.warnIcon} {t('gift.ocr.note_title', lang)}",
+                    value=t("gift.ocr.note_body", lang),
                     inline=False
                 )
 
-                view = OCRSettingsView(self, ocr_settings, onnx_available)
+                view = OCRSettingsView(self, ocr_settings, onnx_available, lang)
 
                 if interaction.response.is_done():
                     try:
@@ -2171,21 +2247,22 @@ class GiftOperations(commands.Cog):
 
             except sqlite3.Error as db_err:
                 self.logger.exception(f"Database error in show_ocr_settings: {db_err}")
-                error_message = f"{theme.deniedIcon} A database error occurred while loading OCR settings."
+                error_message = f"{theme.deniedIcon} {t('gift.ocr.error.db', lang)}"
                 if interaction.response.is_done(): await interaction.followup.send(error_message, ephemeral=True)
                 else: await interaction.response.send_message(error_message, ephemeral=True)
             except Exception as e:
                 self.logger.exception(f"Error showing OCR settings: {e}")
                 traceback.print_exc()
-                error_message = f"{theme.deniedIcon} An unexpected error occurred while loading OCR settings."
+                error_message = f"{theme.deniedIcon} {t('gift.ocr.error.unexpected', lang)}"
                 if interaction.response.is_done():
                     await interaction.followup.send(error_message, ephemeral=True)
                 else:
                     await interaction.response.send_message(error_message, ephemeral=True)
 
-    async def update_ocr_settings(self, interaction, enabled=None, save_images=None):
+    async def update_ocr_settings(self, interaction, enabled=None, save_images=None, lang: str | None = None):
         """Update OCR settings in the database and reinitialize the solver if needed."""
         try:
+            lang = lang or get_guild_language(None)
             self.settings_cursor.execute("SELECT enabled, save_images FROM ocr_settings ORDER BY id DESC LIMIT 1")
             current_settings = self.settings_cursor.fetchone()
             if not current_settings:
@@ -2207,18 +2284,21 @@ class GiftOperations(commands.Cog):
             self.settings_conn.commit()
             self.logger.info(f"GiftOps: Updated OCR settings in DB -> Enabled={target_enabled}, SaveImages={target_save_images}")
 
-            message_suffix = "Settings updated."
+            message_suffix = t("gift.ocr.update.settings_updated", lang)
             reinitialize_solver = False
 
             if enabled is not None and enabled != current_enabled:
                 reinitialize_solver = True
-                message_suffix = f"Solver has been {'enabled' if target_enabled == 1 else 'disabled'}."
+                message_suffix = t(
+                    "gift.ocr.update.solver_enabled",
+                    lang
+                ) if target_enabled == 1 else t("gift.ocr.update.solver_disabled", lang)
             
             if save_images is not None and self.captcha_solver and self.captcha_solver.is_initialized:
                 self.captcha_solver.save_images_mode = target_save_images
                 self.logger.info(f"GiftOps: Updated live captcha_solver.save_images_mode to {target_save_images}")
                 if not reinitialize_solver:
-                    message_suffix = "Image saving preference updated."
+                    message_suffix = t("gift.ocr.update.image_saving_updated", lang)
 
             if reinitialize_solver:
                 self.captcha_solver = None
@@ -2228,43 +2308,44 @@ class GiftOperations(commands.Cog):
                         self.captcha_solver = GiftCaptchaSolver(save_images=target_save_images)
                         if self.captcha_solver.is_initialized:
                             self.logger.info("GiftOps: ONNX solver reinitialized successfully.")
-                            message_suffix += " Solver reinitialized."
+                            message_suffix = f"{message_suffix} {t('gift.ocr.update.solver_reinitialized', lang)}"
                         else:
                             self.logger.error("GiftOps: ONNX solver FAILED to reinitialize.")
-                            message_suffix += " Solver reinitialization failed."
+                            message_suffix = f"{message_suffix} {t('gift.ocr.update.solver_reinit_failed', lang)}"
                             self.captcha_solver = None
-                            return False, f"CAPTCHA solver settings updated. {message_suffix}"
+                            return False, t("gift.ocr.update.result", lang, detail=message_suffix)
                     except ImportError as imp_err:
                         self.logger.exception(f"GiftOps: ERROR - Reinitialization failed: Missing library {imp_err}")
-                        message_suffix += f" Solver initialization failed (Missing Library: {imp_err})."
+                        message_suffix = f"{message_suffix} {t('gift.ocr.update.solver_init_missing_lib', lang, error=imp_err)}"
                         self.captcha_solver = None
-                        return False, f"CAPTCHA solver settings updated. {message_suffix}"
+                        return False, t("gift.ocr.update.result", lang, detail=message_suffix)
                     except Exception as e:
                         self.logger.exception(f"GiftOps: ERROR - Reinitialization failed: {e}")
-                        message_suffix += f" Solver initialization failed ({e})."
+                        message_suffix = f"{message_suffix} {t('gift.ocr.update.solver_init_failed', lang, error=e)}"
                         self.captcha_solver = None
-                        return False, f"CAPTCHA solver settings updated. {message_suffix}"
+                        return False, t("gift.ocr.update.result", lang, detail=message_suffix)
                 else:
                     self.logger.info("GiftOps: OCR disabled, solver instance removed/kept None.")
 
-            return True, f"CAPTCHA solver settings: {message_suffix}"
+            return True, t("gift.ocr.update.result", lang, detail=message_suffix)
 
         except sqlite3.Error as db_err:
             self.logger.exception(f"Database error updating OCR settings: {db_err}")
-            return False, f"Database error updating OCR settings: {db_err}"
+            return False, t("gift.ocr.update.db_error", lang, error=db_err)
         except Exception as e:
             self.logger.exception(f"Unexpected error updating OCR settings: {e}")
-            return False, f"Unexpected error updating OCR settings: {e}"
+            return False, t("gift.ocr.update.unexpected_error", lang, error=e)
 
     async def show_redemption_priority(self, interaction: discord.Interaction):
         """Show the redemption priority management interface (global admin only)."""
         try:
+            lang = _get_lang(interaction)
             # Check global admin permission
             self.settings_cursor.execute("SELECT is_initial FROM admin WHERE id = ?", (interaction.user.id,))
             admin_info = self.settings_cursor.fetchone()
 
             if not admin_info or admin_info[0] != 1:
-                error_msg = f"{theme.deniedIcon} Only global administrators can manage redemption priority."
+                error_msg = f"{theme.deniedIcon} {t('gift.priority.global_only', lang)}"
                 if interaction.response.is_done():
                     await interaction.followup.send(error_msg, ephemeral=True)
                 else:
@@ -2276,7 +2357,7 @@ class GiftOperations(commands.Cog):
             all_alliances = self.alliance_cursor.fetchall()
 
             if not all_alliances:
-                error_msg = "No alliances found."
+                error_msg = t("gift.priority.none_found", lang)
                 if interaction.response.is_done():
                     await interaction.followup.send(error_msg, ephemeral=True)
                 else:
@@ -2303,8 +2384,8 @@ class GiftOperations(commands.Cog):
 
             # Create embed
             embed = discord.Embed(
-                title=f"{theme.chartIcon} Redemption Priority",
-                description="Configure the order in which alliances receive gift codes.\nSelect an alliance and use the buttons to change its position.",
+                title=f"{theme.chartIcon} {t('gift.priority.title', lang)}",
+                description=t("gift.priority.description", lang),
                 color=theme.emColor1
             )
 
@@ -2314,12 +2395,12 @@ class GiftOperations(commands.Cog):
                 priority_list.append(f"`{idx}.` **{name}**")
 
             embed.add_field(
-                name="Current Priority Order",
-                value="\n".join(priority_list) if priority_list else "No alliances configured",
+                name=t("gift.priority.current_order", lang),
+                value="\n".join(priority_list) if priority_list else t("gift.priority.none", lang),
                 inline=False
             )
 
-            view = RedemptionPriorityView(self, alliances_with_priority)
+            view = RedemptionPriorityView(self, alliances_with_priority, lang)
 
             if interaction.response.is_done():
                 await interaction.followup.send(embed=embed, view=view, ephemeral=True)
@@ -2328,7 +2409,7 @@ class GiftOperations(commands.Cog):
 
         except Exception as e:
             self.logger.exception(f"Error in show_redemption_priority: {e}")
-            error_msg = f"An error occurred: {str(e)}"
+            error_msg = f"{t('gift.error.generic', lang)}: {str(e)}"
             if interaction.response.is_done():
                 await interaction.followup.send(error_msg, ephemeral=True)
             else:
@@ -2336,6 +2417,7 @@ class GiftOperations(commands.Cog):
 
     async def validate_gift_codes(self):
         try:
+            lang = get_guild_language(None)
             self.cursor.execute("SELECT giftcode, validation_status FROM gift_codes WHERE validation_status != 'invalid'")
             all_codes = self.cursor.fetchall()
             
@@ -2367,21 +2449,24 @@ class GiftOperations(commands.Cog):
                         asyncio.create_task(self.api.remove_giftcode(giftcode, from_validation=True))
 
                     reason_map = {
-                        "TIME_ERROR": "Code has expired (TIME_ERROR)",
-                        "CDK_NOT_FOUND": "Code not found or incorrect (CDK_NOT_FOUND)",
-                        "USAGE_LIMIT": "Usage limit reached (USAGE_LIMIT)"
+                        "TIME_ERROR": t("gift.redeem.invalid_time_error", lang),
+                        "CDK_NOT_FOUND": t("gift.redeem.invalid_cdk_not_found", lang),
+                        "USAGE_LIMIT": t("gift.redeem.invalid_usage_limit", lang)
                     }
-                    detailed_reason = reason_map.get(status, f"Code invalid ({status})")
+                    detailed_reason = reason_map.get(
+                        status,
+                        t("gift.redeem.invalid_generic", lang, status=status)
+                    )
 
                     admin_embed = discord.Embed(
-                        title=f"{theme.giftIcon} Gift Code Invalidated",
+                        title=f"{theme.giftIcon} {t('gift.validation.invalidated_title', lang)}",
                         description=(
-                            f"**Gift Code Details**\n"
+                            f"**{t('gift.common.details_title', lang)}**\n"
                             f"{theme.upperDivider}\n"
-                            f"{theme.giftIcon} **Gift Code:** `{giftcode}`\n"
-                            f"{theme.deniedIcon} **Status:** {detailed_reason}\n"
-                            f"{theme.editListIcon} **Action:** Code marked as invalid in database\n"
-                            f"{theme.timeIcon} **Time:** <t:{int(datetime.now().timestamp())}:R>\n"
+                            f"{theme.giftIcon} **{t('gift.common.gift_code_label', lang)}** `{giftcode}`\n"
+                            f"{theme.deniedIcon} **{t('gift.common.status_label', lang)}** {detailed_reason}\n"
+                            f"{theme.editListIcon} **{t('gift.common.action_label', lang)}** {t('gift.redeem.invalid_action', lang)}\n"
+                            f"{theme.timeIcon} **{t('gift.common.time_label', lang)}** <t:{int(datetime.now().timestamp())}:R>\n"
                             f"{theme.lowerDivider}\n"
                         ),
                         color=discord.Color.orange()
@@ -2409,6 +2494,7 @@ class GiftOperations(commands.Cog):
             self.logger.exception(f"Error in validate_gift_codes: {str(e)}")
 
     async def handle_success(self, message, giftcode):
+        lang = get_guild_language(message.guild.id if message.guild else None)
         test_fid = self.get_test_fid()
         status = await self.claim_giftcode_rewards_wos(test_fid, giftcode)
         
@@ -2424,18 +2510,19 @@ class GiftOperations(commands.Cog):
                     pass
                 
                 await message.add_reaction(f"{theme.verifiedIcon}")
-                await message.reply("Gift code successfully added.", mention_author=False)
+                await message.reply(t("gift.validation.added_reply", lang), mention_author=False)
         elif status == "TIME_ERROR":
             await message.add_reaction(f"{theme.deniedIcon}")
-            await message.reply("Gift code expired.", mention_author=False)
+            await message.reply(t("gift.validation.expired_reply", lang), mention_author=False)
         elif status == "CDK_NOT_FOUND":
             await message.add_reaction(f"{theme.deniedIcon}")
-            await message.reply("The gift code is incorrect.", mention_author=False)
+            await message.reply(t("gift.validation.incorrect_reply", lang), mention_author=False)
         elif status == "USAGE_LIMIT":
             await message.add_reaction(f"{theme.deniedIcon}")
-            await message.reply("Usage limit has been reached for this code.", mention_author=False)
+            await message.reply(t("gift.validation.usage_limit_reply", lang), mention_author=False)
 
     async def handle_already_received(self, message, giftcode):
+        lang = get_guild_language(message.guild.id if message.guild else None)
         test_fid = self.get_test_fid()
         status = await self.claim_giftcode_rewards_wos(test_fid, giftcode)
         
@@ -2451,16 +2538,16 @@ class GiftOperations(commands.Cog):
                     pass
                 
                 await message.add_reaction(f"{theme.verifiedIcon}")
-                await message.reply("Gift code successfully added.", mention_author=False)
+                await message.reply(t("gift.validation.added_reply", lang), mention_author=False)
         elif status == "TIME_ERROR":
             await message.add_reaction(f"{theme.deniedIcon}")
-            await message.reply("Gift code expired.", mention_author=False)
+            await message.reply(t("gift.validation.expired_reply", lang), mention_author=False)
         elif status == "CDK_NOT_FOUND":
             await message.add_reaction(f"{theme.deniedIcon}")
-            await message.reply("The gift code is incorrect.", mention_author=False)
+            await message.reply(t("gift.validation.incorrect_reply", lang), mention_author=False)
         elif status == "USAGE_LIMIT":
             await message.add_reaction(f"{theme.deniedIcon}")
-            await message.reply("Usage limit has been reached for this code.", mention_author=False)
+            await message.reply(t("gift.validation.usage_limit_reply", lang), mention_author=False)
 
     async def get_admin_info(self, user_id):
         """Get admin info - delegates to centralized PermissionManager"""
@@ -2497,10 +2584,11 @@ class GiftOperations(commands.Cog):
         return alliances
 
     async def setup_gift_channel(self, interaction: discord.Interaction):
+        lang = _get_lang(interaction)
         admin_info = await self.get_admin_info(interaction.user.id)
         if not admin_info:
             await interaction.response.send_message(
-                f"{theme.deniedIcon} You are not authorized to perform this action.",
+                f"{theme.deniedIcon} {t('gift.channel.setup.not_authorized', lang)}",
                 ephemeral=True
             )
             return
@@ -2509,8 +2597,8 @@ class GiftOperations(commands.Cog):
         if not available_alliances:
             await interaction.response.send_message(
                 embed=discord.Embed(
-                    title=f"{theme.deniedIcon} No Available Alliances",
-                    description="You don't have access to any alliances.",
+                    title=f"{theme.deniedIcon} {t('gift.channel.setup.no_alliances_title', lang)}",
+                    description=t("gift.channel.setup.no_alliances_body", lang),
                     color=theme.emColor2
                 ),
                 ephemeral=True
@@ -2529,12 +2617,12 @@ class GiftOperations(commands.Cog):
         current_channels = dict(self.cursor.fetchall())
 
         alliance_embed = discord.Embed(
-            title=f"{theme.announceIcon} Gift Code Channel Setup",
+            title=f"{theme.announceIcon} {t('gift.channel.setup.title', lang)}",
             description=(
-                f"Please select an alliance to set up gift code channel:\n\n"
-                f"**Alliance List**\n"
+                f"{t('gift.channel.setup.select_alliance', lang)}\n\n"
+                f"**{t('gift.redeem.alliance_list', lang)}**\n"
                 f"{theme.middleDivider}\n"
-                f"Select an alliance from the list below:\n"
+                f"{t('gift.channel.setup.select_alliance_hint', lang)}\n"
             ),
             color=theme.emColor1
         )
@@ -2547,13 +2635,13 @@ class GiftOperations(commands.Cog):
                     alliance_id = int(view.current_select.values[0])
 
                 channel_embed = discord.Embed(
-                    title=f"{theme.announceIcon} Gift Code Channel Setup",
+                    title=f"{theme.announceIcon} {t('gift.channel.setup.title', lang)}",
                     description=(
-                        "**Instructions:**\n"
+                        f"**{t('gift.channel.setup.instructions', lang)}**\n"
                         f"{theme.middleDivider}\n"
-                        "Please select a channel for gift codes\n\n"
-                        "**Page:** 1/1\n"
-                        f"**Total Channels:** {len(select_interaction.guild.text_channels)}"
+                        f"{t('gift.channel.setup.select_channel', lang)}\n\n"
+                        f"**{t('gift.channel.setup.page', lang)}** 1/1\n"
+                        f"**{t('gift.channel.setup.total_channels', lang)}** {len(select_interaction.guild.text_channels)}"
                     ),
                     color=theme.emColor1
                 )
@@ -2568,17 +2656,20 @@ class GiftOperations(commands.Cog):
                         """, (alliance_id, channel_id))
                         self.conn.commit()
 
-                        alliance_name = next((name for aid, name in available_alliances if aid == alliance_id), "Unknown Alliance")
+                        alliance_name = next(
+                            (name for aid, name in available_alliances if aid == alliance_id),
+                            t("gift.redeem.unknown", lang)
+                        )
 
                         success_embed = discord.Embed(
-                            title=f"{theme.verifiedIcon} Gift Code Channel Set",
+                            title=f"{theme.verifiedIcon} {t('gift.channel.setup.success_title', lang)}",
                             description=(
-                                f"Successfully set gift code channel:\n\n"
-                                f"{theme.allianceIcon} **Alliance:** {alliance_name}\n"
-                                f"{theme.editListIcon} **Channel:** <#{channel_id}>\n\n"
-                                f"{theme.verifiedIcon} Channel has been configured for gift code monitoring.\n"
-                                f"Use **Channel History Scan** in Gift Code Settings to scan historical messages on-demand.\n"
-                                f"**Tip:** Follow the official WOS #giftcodes channel in your gift code channel to easily find new codes."
+                                f"{t('gift.channel.setup.success_desc', lang)}\n\n"
+                                f"{theme.allianceIcon} **{t('gift.channel.alliance_label', lang)}** {alliance_name}\n"
+                                f"{theme.editListIcon} **{t('gift.channel.channel_label', lang)}** <#{channel_id}>\n\n"
+                                f"{theme.verifiedIcon} {t('gift.channel.setup.configured_line', lang)}\n"
+                                f"{t('gift.channel.setup.history_hint', lang)}\n"
+                                f"{t('gift.channel.setup.tip', lang)}"
                             ),
                             color=theme.emColor3
                         )
@@ -2591,7 +2682,7 @@ class GiftOperations(commands.Cog):
                     except Exception as e:
                         self.logger.exception(f"Error setting gift code channel: {e}")
                         await channel_interaction.response.send_message(
-                            f"{theme.deniedIcon} An error occurred while setting the gift code channel.",
+                            f"{theme.deniedIcon} {t('gift.channel.setup.error', lang)}",
                             ephemeral=True
                         )
 
@@ -2613,12 +2704,12 @@ class GiftOperations(commands.Cog):
                 self.logger.exception(f"Error in alliance selection: {e}")
                 if not select_interaction.response.is_done():
                     await select_interaction.response.send_message(
-                        f"{theme.deniedIcon} An error occurred while processing your selection.",
+                        f"{theme.deniedIcon} {t('gift.error.process_selection', _get_lang(select_interaction))}",
                         ephemeral=True
                     )
                 else:
                     await select_interaction.followup.send(
-                        f"{theme.deniedIcon} An error occurred while processing your selection.",
+                        f"{theme.deniedIcon} {t('gift.error.process_selection', _get_lang(select_interaction))}",
                         ephemeral=True
                     )
 
@@ -2631,34 +2722,35 @@ class GiftOperations(commands.Cog):
         )
 
     async def show_gift_menu(self, interaction: discord.Interaction):
+        lang = _get_lang(interaction)
         gift_menu_embed = discord.Embed(
-            title=f"{theme.giftIcon} Gift Code Operations",
+            title=f"{theme.giftIcon} {t('gift.menu.title', lang)}",
             description=(
-                "Here you can manage everything related to gift code redemption.\n\n"
-                "The bot automatically retrieves new gift codes from our distribution API. "
-                f"Codes are validated periodically, and automatically removed if they become invalid.\n\n"
-                f"If you're new here, you'll want to head to **Settings** and configure some things:\n"
-                f"- If you want codes to be automatically redeemed, go to **Auto Redemption** and enable it.\n"
-                f"- You can set up a channel via **Channel Management** where the bot will scan for new codes.\n"
-                f"- You can also adjust the order in which alliances redeem gift codes via **Redemption Priority**.\n\n"
-                f"**Available Operations**\n"
+                f"{t('gift.menu.intro', lang)}\n\n"
+                f"{t('gift.menu.auto_fetch', lang)} "
+                f"{t('gift.menu.auto_validate', lang)}\n\n"
+                f"{t('gift.menu.getting_started', lang)}\n"
+                f"- {t('gift.menu.tip_auto', lang)}\n"
+                f"- {t('gift.menu.tip_channel', lang)}\n"
+                f"- {t('gift.menu.tip_priority', lang)}\n\n"
+                f"**{t('gift.menu.available', lang)}**\n"
                 f"{theme.upperDivider}\n"
-                f"{theme.giftIcon} **Add Gift Code**\n"
-                f"└ Manually input a new gift code\n\n"
-                f"{theme.listIcon} **List Gift Codes**\n"
-                f"└ View all active, valid codes\n\n"
-                f"{theme.targetIcon} **Redeem Gift Code**\n"
-                f"└ Redeem gift code(s) for one or more alliances\n\n"
-                f"{theme.settingsIcon} **Settings**\n"
-                f"└ Set up a gift code channel, configure auto redemption, and more...\n\n"
-                f"{theme.deniedIcon} **Delete Gift Code**\n"
-                f"└ Remove existing codes (rarely needed)\n"
+                f"{theme.giftIcon} **{t('gift.menu.add', lang)}**\n"
+                f"└ {t('gift.menu.add_desc', lang)}\n\n"
+                f"{theme.listIcon} **{t('gift.menu.list', lang)}**\n"
+                f"└ {t('gift.menu.list_desc', lang)}\n\n"
+                f"{theme.targetIcon} **{t('gift.menu.redeem', lang)}**\n"
+                f"└ {t('gift.menu.redeem_desc', lang)}\n\n"
+                f"{theme.settingsIcon} **{t('gift.menu.settings', lang)}**\n"
+                f"└ {t('gift.menu.settings_desc', lang)}\n\n"
+                f"{theme.deniedIcon} **{t('gift.menu.delete', lang)}**\n"
+                f"└ {t('gift.menu.delete_desc', lang)}\n"
                 f"{theme.lowerDivider}"
             ),
             color=discord.Color.gold()
         )
 
-        view = GiftView(self)
+        view = GiftView(self, lang)
         try:
             await interaction.response.edit_message(embed=gift_menu_embed, view=view)
         except discord.InteractionResponded:
@@ -2667,26 +2759,28 @@ class GiftOperations(commands.Cog):
             pass
 
     async def create_gift_code(self, interaction: discord.Interaction):
+        lang = _get_lang(interaction)
         self.settings_cursor.execute("SELECT 1 FROM admin WHERE id = ?", (interaction.user.id,))
         if not self.settings_cursor.fetchone():
             await interaction.response.send_message(
-                f"{theme.deniedIcon} You are not authorized to create gift codes.",
+                f"{theme.deniedIcon} {t('gift.error.create_not_authorized', lang)}",
                 ephemeral=True
             )
             return
 
-        modal = CreateGiftCodeModal(self)
+        modal = CreateGiftCodeModal(self, lang)
         try:
             await interaction.response.send_modal(modal)
         except Exception as e:
             self.logger.exception(f"Error showing modal: {e}")
             if not interaction.response.is_done():
                 await interaction.response.send_message(
-                    f"{theme.deniedIcon} An error occurred while showing the gift code creation form.",
+                    f"{theme.deniedIcon} {t('gift.error.create_form', lang)}",
                     ephemeral=True
                 )
 
     async def list_gift_codes(self, interaction: discord.Interaction):
+        lang = _get_lang(interaction)
         self.cursor.execute("""
             SELECT 
                 gc.giftcode,
@@ -2703,21 +2797,21 @@ class GiftOperations(commands.Cog):
         
         if not codes:
             await interaction.response.send_message(
-                "No active gift codes found in the database.",
+                t("gift.list.none", lang),
                 ephemeral=True
             )
             return
 
         embed = discord.Embed(
-            title=f"{theme.giftIcon} Active Gift Codes",
-            description="Currently active and valid gift codes.",
+            title=f"{theme.giftIcon} {t('gift.list.title', lang)}",
+            description=t("gift.list.description", lang),
             color=theme.emColor1
         )
 
         for code, date, used_count in codes:
             embed.add_field(
-                name=f"Code: {code}",
-                value=f"Created: {date}\nUsed by: {used_count} users",
+                name=t("gift.list.code_label", lang, code=code),
+                value=t("gift.list.code_value", lang, date=date, used=used_count),
                 inline=False
             )
 
@@ -2725,6 +2819,7 @@ class GiftOperations(commands.Cog):
 
     async def delete_gift_code(self, interaction: discord.Interaction):
         try:
+            lang = _get_lang(interaction)
             settings_conn = sqlite3.connect('db/settings.sqlite')
             settings_cursor = settings_conn.cursor()
             
@@ -2740,8 +2835,8 @@ class GiftOperations(commands.Cog):
             if not is_admin:
                 await interaction.response.send_message(
                     embed=discord.Embed(
-                        title=f"{theme.deniedIcon} Unauthorized Access",
-                        description="This action requires Global Admin privileges.",
+                        title=f"{theme.deniedIcon} {t('gift.delete.unauthorized_title', lang)}",
+                        description=t("gift.delete.unauthorized_body", lang),
                         color=theme.emColor2
                     ),
                     ephemeral=True
@@ -2765,8 +2860,8 @@ class GiftOperations(commands.Cog):
             if not codes:
                 await interaction.response.send_message(
                     embed=discord.Embed(
-                        title=f"{theme.deniedIcon} No Gift Codes",
-                        description="There are no gift codes in the database to delete.",
+                        title=f"{theme.deniedIcon} {t('gift.delete.none_title', lang)}",
+                        description=t("gift.delete.none_body", lang),
                         color=theme.emColor2
                     ),
                     ephemeral=True
@@ -2780,18 +2875,24 @@ class GiftOperations(commands.Cog):
             select_options = []
             for code, date, validation_status, used_count in codes_to_show:
                 if validation_status == 'validated':
-                    status_display = f"{theme.verifiedIcon} Valid"
+                    status_display = f"{theme.verifiedIcon} {t('gift.delete.status_valid', lang)}"
                 elif validation_status == 'invalid':
-                    status_display = f"{theme.deniedIcon} Invalid"
+                    status_display = f"{theme.deniedIcon} {t('gift.delete.status_invalid', lang)}"
                 elif validation_status == 'pending':
-                    status_display = f"{theme.warnIcon} Pending"
+                    status_display = f"{theme.warnIcon} {t('gift.delete.status_pending', lang)}"
                 else:
-                    status_display = f"{theme.infoIcon} Unknown"
+                    status_display = f"{theme.infoIcon} {t('gift.delete.status_unknown', lang)}"
                 
                 select_options.append(
                     discord.SelectOption(
                         label=f"Code: {code}",
-                        description=f"{status_display} | Created: {date} | Used: {used_count}",
+                        description=t(
+                            "gift.delete.option_desc",
+                            lang,
+                            status=status_display,
+                            date=date,
+                            used=used_count
+                        ),
                         value=code
                     )
                 )
@@ -2800,8 +2901,8 @@ class GiftOperations(commands.Cog):
             if not select_options:
                 await interaction.response.send_message(
                     embed=discord.Embed(
-                        title=f"{theme.deniedIcon} No Gift Codes Available",
-                        description="No gift codes found in the database to delete.",
+                        title=f"{theme.deniedIcon} {t('gift.delete.none_title', lang)}",
+                        description=t("gift.delete.none_body", lang),
                         color=theme.emColor2
                     ),
                     ephemeral=True
@@ -2809,7 +2910,7 @@ class GiftOperations(commands.Cog):
                 return
             
             select = discord.ui.Select(
-                placeholder="Select a gift code to delete",
+                placeholder=t("gift.delete.select_placeholder", lang),
                 options=select_options
             )
 
@@ -2818,12 +2919,12 @@ class GiftOperations(commands.Cog):
                 
                 confirm = discord.ui.Button(
                     style=discord.ButtonStyle.danger,
-                    label="Confirm Delete",
+                    label=t("gift.delete.confirm_label", lang),
                     custom_id="confirm"
                 )
                 cancel = discord.ui.Button(
                     style=discord.ButtonStyle.secondary,
-                    label="Cancel",
+                    label=t("gift.button.cancel", lang),
                     custom_id="cancel"
                 )
 
@@ -2836,13 +2937,13 @@ class GiftOperations(commands.Cog):
                                 self.conn.commit()
                                 
                                 success_embed = discord.Embed(
-                                    title=f"{theme.verifiedIcon} Gift Code Deleted",
+                                    title=f"{theme.verifiedIcon} {t('gift.delete.success_title', lang)}",
                                     description=(
-                                        f"**Deletion Details**\n"
+                                        f"**{t('gift.delete.details', lang)}**\n"
                                         f"{theme.upperDivider}\n"
-                                        f"{theme.giftIcon} **Gift Code:** `{selected_code}`\n"
-                                        f"{theme.userIcon} **Deleted by:** {button_interaction.user.mention}\n"
-                                        f"{theme.timeIcon} **Time:** <t:{int(datetime.now().timestamp())}:R>\n"
+                                        f"{theme.giftIcon} **{t('gift.delete.code_label', lang)}** `{selected_code}`\n"
+                                        f"{theme.userIcon} **{t('gift.delete.deleted_by', lang)}** {button_interaction.user.mention}\n"
+                                        f"{theme.timeIcon} **{t('gift.delete.time', lang)}** <t:{int(datetime.now().timestamp())}:R>\n"
                                         f"{theme.lowerDivider}\n"
                                     ),
                                     color=theme.emColor3
@@ -2855,14 +2956,14 @@ class GiftOperations(commands.Cog):
                                 
                             except Exception as e:
                                 await button_interaction.response.send_message(
-                                    f"{theme.deniedIcon} An error occurred while deleting the gift code.",
+                                    f"{theme.deniedIcon} {t('gift.delete.error_deleting', lang)}",
                                     ephemeral=True
                                 )
 
                         else:
                             cancel_embed = discord.Embed(
-                                title=f"{theme.deniedIcon} Deletion Cancelled",
-                                description="The gift code deletion was cancelled.",
+                                title=f"{theme.deniedIcon} {t('gift.delete.cancelled_title', lang)}",
+                                description=t("gift.delete.cancelled_body", lang),
                                 color=theme.emColor2
                             )
                             await button_interaction.response.edit_message(
@@ -2874,12 +2975,12 @@ class GiftOperations(commands.Cog):
                         self.logger.exception(f"Button callback error: {str(e)}")
                         try:
                             await button_interaction.response.send_message(
-                                f"{theme.deniedIcon} An error occurred while processing the request.",
+                                f"{theme.deniedIcon} {t('gift.error.process_request', lang)}",
                                 ephemeral=True
                             )
                         except:
                             await button_interaction.followup.send(
-                                f"{theme.deniedIcon} An error occurred while processing the request.",
+                                f"{theme.deniedIcon} {t('gift.error.process_request', lang)}",
                                 ephemeral=True
                             )
 
@@ -2891,12 +2992,12 @@ class GiftOperations(commands.Cog):
                 confirm_view.add_item(cancel)
 
                 confirmation_embed = discord.Embed(
-                    title=f"{theme.warnIcon} Confirm Deletion",
+                    title=f"{theme.warnIcon} {t('gift.delete.confirm_title', lang)}",
                     description=(
-                        f"**Gift Code Details**\n"
+                        f"**{t('gift.delete.details', lang)}**\n"
                         f"{theme.upperDivider}\n"
-                        f"{theme.giftIcon} **Selected Code:** `{selected_code}`\n"
-                        f"{theme.warnIcon} **Warning:** This action cannot be undone!\n"
+                        f"{theme.giftIcon} **{t('gift.delete.selected_code', lang)}** `{selected_code}`\n"
+                        f"{theme.warnIcon} **{t('gift.delete.warning', lang)}** {t('gift.delete.warning_body', lang)}\n"
                         f"{theme.lowerDivider}\n"
                     ),
                     color=discord.Color.yellow()
@@ -2913,23 +3014,23 @@ class GiftOperations(commands.Cog):
 
             # Build description with truncation notice if needed
             description_text = (
-                f"**Instructions**\n"
+                f"**{t('gift.delete.instructions', lang)}**\n"
                 f"{theme.upperDivider}\n"
-                f"{theme.num1Icon} Select a gift code from the menu below\n"
-                f"{theme.num2Icon} Confirm your selection\n"
-                f"{theme.num3Icon} The code will be permanently deleted\n"
+                f"{theme.num1Icon} {t('gift.delete.step1', lang)}\n"
+                f"{theme.num2Icon} {t('gift.delete.step2', lang)}\n"
+                f"{theme.num3Icon} {t('gift.delete.step3', lang)}\n"
                 f"{theme.lowerDivider}\n"
             )
             
             if total_codes > 25:
                 description_text += (
-                    f"\n{theme.warnIcon} **Note:** Showing 25 of {total_codes} codes.\n"
-                    f"Oldest codes are shown first.\n"
-                    f"To delete newer codes, you'll need to delete the older ones first."
+                    f"\n{theme.warnIcon} **{t('gift.delete.note', lang, total=total_codes)}**\n"
+                    f"{t('gift.delete.note_oldest', lang)}\n"
+                    f"{t('gift.delete.note_delete_order', lang)}"
                 )
             
             initial_embed = discord.Embed(
-                title=f"{theme.trashIcon} Delete Gift Code",
+                title=f"{theme.trashIcon} {t('gift.delete.title', lang)}",
                 description=description_text,
                 color=theme.emColor1
             )
@@ -2943,15 +3044,16 @@ class GiftOperations(commands.Cog):
         except Exception as e:
             self.logger.exception(f"Delete gift code error: {str(e)}")
             await interaction.response.send_message(
-                f"{theme.deniedIcon} An error occurred while processing the request.",
+                f"{theme.deniedIcon} {t('gift.error.process_request', _get_lang(interaction))}",
                 ephemeral=True
             )
 
     async def delete_gift_channel(self, interaction: discord.Interaction):
+        lang = _get_lang(interaction)
         admin_info = await self.get_admin_info(interaction.user.id)
         if not admin_info:
             await interaction.response.send_message(
-                f"{theme.deniedIcon} You are not authorized to perform this action.",
+                f"{theme.deniedIcon} {t('gift.error.not_authorized', lang)}",
                 ephemeral=True
             )
             return
@@ -2960,8 +3062,8 @@ class GiftOperations(commands.Cog):
         if not available_alliances:
             await interaction.response.send_message(
                 embed=discord.Embed(
-                    title=f"{theme.deniedIcon} No Available Alliances",
-                    description="You don't have access to any alliances.",
+                    title=f"{theme.deniedIcon} {t('gift.error.no_alliances_title', lang)}",
+                    description=t("gift.error.no_alliances_body", lang),
                     color=theme.emColor2
                 ),
                 ephemeral=True
@@ -2983,8 +3085,8 @@ class GiftOperations(commands.Cog):
         if not alliances_with_counts:
             await interaction.response.send_message(
                 embed=discord.Embed(
-                    title=f"{theme.deniedIcon} No Channels Set",
-                    description="There are no gift code channels set for your alliances.",
+                    title=f"{theme.deniedIcon} {t('gift.channel.none_set_title', lang)}",
+                    description=t("gift.channel.none_set_body", lang),
                     color=theme.emColor2
                 ),
                 ephemeral=True
@@ -2992,12 +3094,12 @@ class GiftOperations(commands.Cog):
             return
 
         remove_embed = discord.Embed(
-            title=f"{theme.trashIcon} Remove Gift Code Channel",
+            title=f"{theme.trashIcon} {t('gift.channel.remove_title', lang)}",
             description=(
-                f"Select an alliance to remove its gift code channel:\n\n"
-                f"**Current Log Channels**\n"
+                f"{t('gift.channel.remove_select', lang)}\n\n"
+                f"**{t('gift.channel.current_channels', lang)}**\n"
                 f"{theme.upperDivider}\n"
-                f"Select an alliance from the list below:\n"
+                f"{t('gift.channel.select_from_list', lang)}\n"
             ),
             color=theme.emColor2
         )
@@ -3013,14 +3115,16 @@ class GiftOperations(commands.Cog):
                 channel_id = self.cursor.fetchone()[0]
                 
                 alliance_name = next((name for aid, name in available_alliances if aid == alliance_id), "Unknown Alliance")
+                if alliance_name == "Unknown Alliance":
+                    alliance_name = t("gift.redeem.unknown", lang)
                 
                 confirm_embed = discord.Embed(
-                    title=f"{theme.warnIcon} Confirm Removal",
+                    title=f"{theme.warnIcon} {t('gift.channel.confirm_remove_title', lang)}",
                     description=(
-                        f"Are you sure you want to remove the gift code channel for:\n\n"
-                        f"{theme.allianceIcon} **Alliance:** {alliance_name}\n"
-                        f"{theme.editListIcon} **Channel:** <#{channel_id}>\n\n"
-                        "This action cannot be undone!"
+                        f"{t('gift.channel.confirm_remove_body', lang)}\n\n"
+                        f"{theme.allianceIcon} **{t('gift.channel.alliance_label', lang)}** {alliance_name}\n"
+                        f"{theme.editListIcon} **{t('gift.channel.channel_label', lang)}** <#{channel_id}>\n\n"
+                        f"{t('gift.channel.warning_body', lang)}"
                     ),
                     color=discord.Color.yellow()
                 )
@@ -3033,11 +3137,11 @@ class GiftOperations(commands.Cog):
                         self.conn.commit()
 
                         success_embed = discord.Embed(
-                            title=f"{theme.verifiedIcon} Gift Code Channel Removed",
+                            title=f"{theme.verifiedIcon} {t('gift.channel.removed_title', lang)}",
                             description=(
-                                f"Successfully removed gift code channel for:\n\n"
-                                f"{theme.allianceIcon} **Alliance:** {alliance_name}\n"
-                                f"{theme.editListIcon} **Channel:** <#{channel_id}>"
+                                f"{t('gift.channel.removed_body', lang)}\n\n"
+                                f"{theme.allianceIcon} **{t('gift.channel.alliance_label', lang)}** {alliance_name}\n"
+                                f"{theme.editListIcon} **{t('gift.channel.channel_label', lang)}** <#{channel_id}>"
                             ),
                             color=theme.emColor3
                         )
@@ -3050,14 +3154,14 @@ class GiftOperations(commands.Cog):
                     except Exception as e:
                         self.logger.exception(f"Error removing gift code channel: {e}")
                         await button_interaction.response.send_message(
-                            f"{theme.deniedIcon} An error occurred while removing the gift code channel.",
+                            f"{theme.deniedIcon} {t('gift.channel.remove_error', lang)}",
                             ephemeral=True
                         )
 
                 async def cancel_callback(button_interaction: discord.Interaction):
                     cancel_embed = discord.Embed(
-                        title=f"{theme.deniedIcon} Removal Cancelled",
-                        description="The gift code channel removal has been cancelled.",
+                        title=f"{theme.deniedIcon} {t('gift.channel.cancelled_title', lang)}",
+                        description=t("gift.channel.cancelled_body", lang),
                         color=theme.emColor2
                     )
                     await button_interaction.response.edit_message(
@@ -3066,7 +3170,7 @@ class GiftOperations(commands.Cog):
                     )
 
                 confirm_button = discord.ui.Button(
-                    label="Confirm",
+                    label=t("gift.button.confirm", lang),
                     emoji=f"{theme.verifiedIcon}",
                     style=discord.ButtonStyle.danger,
                     custom_id="confirm_remove"
@@ -3074,7 +3178,7 @@ class GiftOperations(commands.Cog):
                 confirm_button.callback = confirm_callback
 
                 cancel_button = discord.ui.Button(
-                    label="Cancel",
+                    label=t("gift.button.cancel", lang),
                     emoji=f"{theme.deniedIcon}",
                     style=discord.ButtonStyle.secondary,
                     custom_id="cancel_remove"
@@ -3099,12 +3203,12 @@ class GiftOperations(commands.Cog):
                 self.logger.exception(f"Error in alliance selection: {e}")
                 if not select_interaction.response.is_done():
                     await select_interaction.response.send_message(
-                        f"{theme.deniedIcon} An error occurred while processing your selection.",
+                        f"{theme.deniedIcon} {t('gift.error.process_request', lang)}",
                         ephemeral=True
                     )
                 else:
                     await select_interaction.followup.send(
-                        f"{theme.deniedIcon} An error occurred while processing your selection.",
+                        f"{theme.deniedIcon} {t('gift.error.process_request', lang)}",
                         ephemeral=True
                     )
 
@@ -3119,13 +3223,14 @@ class GiftOperations(commands.Cog):
     async def delete_gift_channel_for_alliance(self, interaction: discord.Interaction, alliance_id: int):
         """Remove gift code channel setting for a specific alliance"""
         try:
+            lang = _get_lang(interaction)
             # Check if channel exists for this alliance
             self.cursor.execute("SELECT channel_id FROM giftcode_channel WHERE alliance_id = ?", (alliance_id,))
             result = self.cursor.fetchone()
             
             if not result:
                 await interaction.response.send_message(
-                    f"{theme.deniedIcon} No gift code channel is set for this alliance.",
+                    f"{theme.deniedIcon} {t('gift.channel.none_for_alliance', lang)}",
                     ephemeral=True
                 )
                 return
@@ -3135,15 +3240,17 @@ class GiftOperations(commands.Cog):
             # Get alliance name
             available_alliances = await self.get_available_alliances(interaction)
             alliance_name = next((name for aid, name in available_alliances if aid == alliance_id), "Unknown Alliance")
+            if alliance_name == "Unknown Alliance":
+                alliance_name = t("gift.redeem.unknown", lang)
             
             # Create confirmation embed
             confirm_embed = discord.Embed(
-                title=f"{theme.warnIcon} Confirm Channel Removal",
+                title=f"{theme.warnIcon} {t('gift.channel.confirm_remove_title', lang)}",
                 description=(
-                    f"Are you sure you want to remove the gift code channel setting?\n\n"
-                    f"{theme.allianceIcon} **Alliance:** {alliance_name}\n"
-                    f"{theme.editListIcon} **Current Channel:** <#{channel_id}>\n\n"
-                    "This action cannot be undone!"
+                    f"{t('gift.channel.confirm_setting_body', lang)}\n\n"
+                    f"{theme.allianceIcon} **{t('gift.channel.alliance_label', lang)}** {alliance_name}\n"
+                    f"{theme.editListIcon} **{t('gift.channel.current_channel_label', lang)}** <#{channel_id}>\n\n"
+                    f"{t('gift.channel.warning_body', lang)}"
                 ),
                 color=discord.Color.yellow()
             )
@@ -3157,12 +3264,12 @@ class GiftOperations(commands.Cog):
                     self.conn.commit()
                     
                     success_embed = discord.Embed(
-                        title=f"{theme.verifiedIcon} Channel Setting Removed",
+                        title=f"{theme.verifiedIcon} {t('gift.channel.setting_removed_title', lang)}",
                         description=(
-                            f"Successfully removed gift code channel setting:\n\n"
-                            f"{theme.allianceIcon} **Alliance:** {alliance_name}\n"
-                            f"{theme.editListIcon} **Channel:** <#{channel_id}>\n\n"
-                            "You can set a new channel anytime by selecting a channel from the list above."
+                            f"{t('gift.channel.setting_removed_body', lang)}\n\n"
+                            f"{theme.allianceIcon} **{t('gift.channel.alliance_label', lang)}** {alliance_name}\n"
+                            f"{theme.editListIcon} **{t('gift.channel.channel_label', lang)}** <#{channel_id}>\n\n"
+                            f"{t('gift.channel.setting_removed_hint', lang)}"
                         ),
                         color=theme.emColor3
                     )
@@ -3175,14 +3282,14 @@ class GiftOperations(commands.Cog):
                 except Exception as e:
                     self.logger.exception(f"Error removing gift code channel for alliance {alliance_id}: {e}")
                     await button_interaction.response.send_message(
-                        f"{theme.deniedIcon} An error occurred while removing the channel setting.",
+                        f"{theme.deniedIcon} {t('gift.channel.remove_error', lang)}",
                         ephemeral=True
                     )
             
             async def cancel_removal(button_interaction: discord.Interaction):
                 cancel_embed = discord.Embed(
-                    title=f"{theme.deniedIcon} Removal Cancelled",
-                    description="The channel setting removal has been cancelled.",
+                    title=f"{theme.deniedIcon} {t('gift.channel.cancelled_title', lang)}",
+                    description=t("gift.channel.cancelled_body", lang),
                     color=theme.emColor2
                 )
                 await button_interaction.response.edit_message(
@@ -3191,14 +3298,14 @@ class GiftOperations(commands.Cog):
                 )
             
             confirm_button = discord.ui.Button(
-                label="Remove Setting",
+                label=t("gift.channel.remove_setting_button", lang),
                 emoji=f"{theme.trashIcon}",
                 style=discord.ButtonStyle.danger
             )
             confirm_button.callback = confirm_removal
 
             cancel_button = discord.ui.Button(
-                label="Cancel",
+                label=t("gift.button.cancel", lang),
                 emoji=f"{theme.deniedIcon}",
                 style=discord.ButtonStyle.secondary
             )
@@ -3216,16 +3323,17 @@ class GiftOperations(commands.Cog):
         except Exception as e:
             self.logger.exception(f"Error in delete_gift_channel_for_alliance: {e}")
             await interaction.response.send_message(
-                f"{theme.deniedIcon} An error occurred while processing the removal request.",
+                f"{theme.deniedIcon} {t('gift.channel.remove_request_error', _get_lang(interaction))}",
                 ephemeral=True
             )
 
     async def show_settings_menu(self, interaction: discord.Interaction):
         """Show unified settings menu with all configuration options."""
+        lang = _get_lang(interaction)
         admin_info = await self.get_admin_info(interaction.user.id)
         if not admin_info:
             await interaction.response.send_message(
-                f"{theme.deniedIcon} You are not authorized to perform this action.",
+                f"{theme.deniedIcon} {t('gift.error.not_authorized', lang)}",
                 ephemeral=True
             )
             return
@@ -3233,25 +3341,25 @@ class GiftOperations(commands.Cog):
         is_global = admin_info[1] == 1
 
         settings_embed = discord.Embed(
-            title=f"{theme.settingsIcon} Gift Code Settings",
+            title=f"{theme.settingsIcon} {t('gift.settings.title', lang)}",
             description=(
                 f"{theme.upperDivider}\n"
-                f"{theme.announceIcon} **Channel Management**\n"
-                f"└ Set up and manage the channel(s) where the bot scans for new codes\n\n"
-                f"{theme.giftIcon} **Automatic Redemption**\n"
-                f"└ Enable/disable auto-redemption of new valid gift codes\n\n"
-                f"{theme.chartIcon} **Redemption Priority**\n"
-                f"└ Change the order in which alliances auto-redeem new gift codes\n\n"
-                f"{theme.searchIcon} **Channel History Scan**\n"
-                f"└ Scan for gift codes in existing messages in a gift channel\n\n"
-                f"{theme.settingsIcon} **CAPTCHA Settings**\n"
-                f"└ Configure CAPTCHA-solver related settings and image saving\n"
+                f"{theme.announceIcon} **{t('gift.settings.channel_mgmt', lang)}**\n"
+                f"└ {t('gift.settings.channel_mgmt_desc', lang)}\n\n"
+                f"{theme.giftIcon} **{t('gift.settings.auto_redemption', lang)}**\n"
+                f"└ {t('gift.settings.auto_redemption_desc', lang)}\n\n"
+                f"{theme.chartIcon} **{t('gift.settings.priority', lang)}**\n"
+                f"└ {t('gift.settings.priority_desc', lang)}\n\n"
+                f"{theme.searchIcon} **{t('gift.settings.history_scan', lang)}**\n"
+                f"└ {t('gift.settings.history_scan_desc', lang)}\n\n"
+                f"{theme.settingsIcon} **{t('gift.settings.captcha', lang)}**\n"
+                f"└ {t('gift.settings.captcha_desc', lang)}\n"
                 f"{theme.lowerDivider}"
             ),
             color=theme.emColor1
         )
 
-        settings_view = SettingsMenuView(self, is_global)
+        settings_view = SettingsMenuView(self, is_global, lang)
 
         await interaction.response.edit_message(
             embed=settings_embed,
@@ -3260,10 +3368,11 @@ class GiftOperations(commands.Cog):
     
     async def manage_channel_settings(self, interaction: discord.Interaction):
         """Manage gift code channel settings including channel configuration and historical scanning."""
+        lang = _get_lang(interaction)
         admin_info = await self.get_admin_info(interaction.user.id)
         if not admin_info:
             await interaction.response.send_message(
-                f"{theme.deniedIcon} You are not authorized to perform this action.",
+                f"{theme.deniedIcon} {t('gift.error.not_authorized', lang)}",
                 ephemeral=True
             )
             return
@@ -3272,8 +3381,8 @@ class GiftOperations(commands.Cog):
         if not available_alliances:
             await interaction.response.send_message(
                 embed=discord.Embed(
-                    title=f"{theme.deniedIcon} No Available Alliances",
-                    description="You don't have access to any alliances.",
+                    title=f"{theme.deniedIcon} {t('gift.error.no_alliances_title', lang)}",
+                    description=t("gift.error.no_alliances_body", lang),
                     color=theme.emColor2
                 ),
                 ephemeral=True
@@ -3290,8 +3399,8 @@ class GiftOperations(commands.Cog):
         
         alliance_names = {aid: name for aid, name in available_alliances}
         main_embed = discord.Embed(
-            title=f"{theme.settingsIcon} Channel Management",
-            description="Manage gift code channels for your alliances.",
+            title=f"{theme.settingsIcon} {t('gift.channel.manage_title', lang)}",
+            description=t("gift.channel.manage_desc", lang),
             color=theme.emColor1
         )
         
@@ -3311,14 +3420,14 @@ class GiftOperations(commands.Cog):
             
             if configured_text:
                 main_embed.add_field(
-                    name=f"{theme.listIcon} Current Configurations",
+                    name=f"{theme.listIcon} {t('gift.channel.current_configs', lang)}",
                     value=configured_text,
                     inline=False
                 )
         else:
             main_embed.add_field(
-                name=f"{theme.listIcon} Current Configurations",
-                value="No gift code channels configured yet.",
+                name=f"{theme.listIcon} {t('gift.channel.current_configs', lang)}",
+                value=t("gift.channel.no_configs", lang),
                 inline=False
             )
         
@@ -3326,7 +3435,7 @@ class GiftOperations(commands.Cog):
         
         # Configure/Change Channel button
         config_button = discord.ui.Button(
-            label="Configure Channel",
+            label=t("gift.channel.configure_button", lang),
             style=discord.ButtonStyle.primary,
             emoji=f"{theme.announceIcon}"
         )
@@ -3334,8 +3443,8 @@ class GiftOperations(commands.Cog):
         async def config_callback(config_interaction: discord.Interaction):
             # Show alliance selection for configuration
             alliance_embed = discord.Embed(
-                title=f"{theme.announceIcon} Select Alliance to Configure",
-                description="Choose an alliance to set up or change its gift code channel:",
+                title=f"{theme.announceIcon} {t('gift.channel.select_config_title', lang)}",
+                description=t("gift.channel.select_config_desc", lang),
                 color=theme.emColor1
             )
             
@@ -3352,11 +3461,11 @@ class GiftOperations(commands.Cog):
                     # Get the actual channel object to display the name
                     channel = self.bot.get_channel(current_channel_id)
                     if channel:
-                        description = f"Currently: #{channel.name}"
+                        description = t("gift.channel.current_channel_named", lang, name=channel.name)
                     else:
-                        description = f"Currently: Unknown Channel ({current_channel_id})"
+                        description = t("gift.channel.current_channel_unknown", lang, channel_id=current_channel_id)
                 else:
-                    description = "Not configured"
+                    description = t("gift.channel.not_configured", lang)
                 
                 alliance_options.append(discord.SelectOption(
                     label=name,
@@ -3366,7 +3475,7 @@ class GiftOperations(commands.Cog):
                 ))
             
             alliance_select = discord.ui.Select(
-                placeholder="Select alliance to configure...",
+                placeholder=t("gift.channel.select_config_placeholder", lang),
                 options=alliance_options,
                 min_values=1,
                 max_values=1
@@ -3377,8 +3486,8 @@ class GiftOperations(commands.Cog):
                 alliance_name = alliance_names[alliance_id]
                 
                 channel_embed = discord.Embed(
-                    title=f"{theme.announceIcon} Configure Channel for {alliance_name}",
-                    description="Select a channel for gift codes:",
+                    title=f"{theme.announceIcon} {t('gift.channel.configure_for', lang, alliance=alliance_name)}",
+                    description=t("gift.channel.select_channel", lang),
                     color=theme.emColor1
                 )
                 
@@ -3396,11 +3505,11 @@ class GiftOperations(commands.Cog):
                         self.conn.commit()
                         
                         success_embed = discord.Embed(
-                            title=f"{theme.verifiedIcon} Channel Configured",
+                            title=f"{theme.verifiedIcon} {t('gift.channel.configured_title', lang)}",
                             description=(
-                                f"{theme.allianceIcon} **Alliance:** {alliance_name}\n"
-                                f"{theme.announceIcon} **Channel:** <#{channel_id}>\n\n"
-                                f"{theme.verifiedIcon} Channel has been successfully configured for gift code monitoring."
+                                f"{theme.allianceIcon} **{t('gift.channel.alliance_label', lang)}** {alliance_name}\n"
+                                f"{theme.announceIcon} **{t('gift.channel.channel_label', lang)}** <#{channel_id}>\n\n"
+                                f"{theme.verifiedIcon} {t('gift.channel.configured_body', lang)}"
                             ),
                             color=theme.emColor3
                         )
@@ -3413,7 +3522,7 @@ class GiftOperations(commands.Cog):
                     except Exception as e:
                         self.logger.exception(f"Error configuring channel: {e}")
                         await channel_interaction.response.send_message(
-                            f"{theme.deniedIcon} An error occurred while configuring the channel.",
+                            f"{theme.deniedIcon} {t('gift.channel.configure_error', lang)}",
                             ephemeral=True
                         )
                 
@@ -3443,7 +3552,7 @@ class GiftOperations(commands.Cog):
         # Remove Channel button (only show if there are configured channels)
         if channel_configs:
             remove_button = discord.ui.Button(
-                label="Remove Channel",
+                label=t("gift.channel.remove_button", lang),
                 style=discord.ButtonStyle.danger,
                 emoji=f"{theme.trashIcon}"
             )
@@ -3451,8 +3560,8 @@ class GiftOperations(commands.Cog):
             async def remove_callback(remove_interaction: discord.Interaction):
                 # Show alliance selection for removal
                 remove_embed = discord.Embed(
-                    title=f"{theme.trashIcon} Select Alliance to Remove",
-                    description="Choose an alliance to remove its gift code channel configuration:",
+                    title=f"{theme.trashIcon} {t('gift.channel.select_remove_title', lang)}",
+                    description=t("gift.channel.select_remove_desc", lang),
                     color=theme.emColor2
                 )
                 
@@ -3463,12 +3572,12 @@ class GiftOperations(commands.Cog):
                         remove_options.append(discord.SelectOption(
                             label=name,
                             value=str(alliance_id),
-                            description=f"Remove channel <#{channel_id}>",
+                            description=t("gift.channel.remove_option_desc", lang, channel_id=channel_id),
                             emoji=f"{theme.trashIcon}"
                         ))
                 
                 remove_select = discord.ui.Select(
-                    placeholder="Select alliance to remove channel...",
+                    placeholder=t("gift.channel.select_remove_placeholder", lang),
                     options=remove_options,
                     min_values=1,
                     max_values=1
@@ -3483,7 +3592,7 @@ class GiftOperations(commands.Cog):
                     result = self.cursor.fetchone()
                     if not result:
                         await remove_select_interaction.response.send_message(
-                            f"{theme.deniedIcon} Configuration not found.",
+                            f"{theme.deniedIcon} {t('gift.channel.config_not_found', lang)}",
                             ephemeral=True
                         )
                         return
@@ -3492,12 +3601,12 @@ class GiftOperations(commands.Cog):
                     
                     # Confirmation embed
                     confirm_embed = discord.Embed(
-                        title=f"{theme.warnIcon} Confirm Removal",
+                        title=f"{theme.warnIcon} {t('gift.channel.confirm_remove_title', lang)}",
                         description=(
-                            f"Are you sure you want to remove the gift code channel configuration?\n\n"
-                            f"{theme.allianceIcon} **Alliance:** {alliance_name}\n"
-                            f"{theme.announceIcon} **Channel:** <#{channel_id}>\n\n"
-                            f"{theme.warnIcon} **Warning:** This will stop the bot from monitoring this channel for gift codes."
+                            f"{t('gift.channel.confirm_config_body', lang)}\n\n"
+                            f"{theme.allianceIcon} **{t('gift.channel.alliance_label', lang)}** {alliance_name}\n"
+                            f"{theme.announceIcon} **{t('gift.channel.channel_label', lang)}** <#{channel_id}>\n\n"
+                            f"{theme.warnIcon} **{t('gift.channel.warning', lang)}** {t('gift.channel.warning_stop', lang)}"
                         ),
                         color=theme.emColor2
                     )
@@ -3505,13 +3614,13 @@ class GiftOperations(commands.Cog):
                     confirm_view = discord.ui.View(timeout=60)
                     
                     confirm_button = discord.ui.Button(
-                        label="Yes, Remove",
+                        label=t("gift.channel.confirm_remove_button", lang),
                         style=discord.ButtonStyle.danger,
                         emoji=f"{theme.verifiedIcon}"
                     )
                     
                     cancel_button = discord.ui.Button(
-                        label="Cancel",
+                        label=t("gift.button.cancel", lang),
                         style=discord.ButtonStyle.secondary,
                         emoji=f"{theme.deniedIcon}"
                     )
@@ -3522,11 +3631,11 @@ class GiftOperations(commands.Cog):
                             self.conn.commit()
                             
                             success_embed = discord.Embed(
-                                title=f"{theme.verifiedIcon} Channel Configuration Removed",
+                                title=f"{theme.verifiedIcon} {t('gift.channel.config_removed_title', lang)}",
                                 description=(
-                                    f"Successfully removed gift code channel configuration:\n\n"
-                                    f"{theme.allianceIcon} **Alliance:** {alliance_name}\n"
-                                    f"{theme.announceIcon} **Channel:** <#{channel_id}>"
+                                    f"{t('gift.channel.config_removed_body', lang)}\n\n"
+                                    f"{theme.allianceIcon} **{t('gift.channel.alliance_label', lang)}** {alliance_name}\n"
+                                    f"{theme.announceIcon} **{t('gift.channel.channel_label', lang)}** <#{channel_id}>"
                                 ),
                                 color=theme.emColor3
                             )
@@ -3539,7 +3648,7 @@ class GiftOperations(commands.Cog):
                         except Exception as e:
                             self.logger.exception(f"Error removing channel configuration: {e}")
                             await confirm_interaction.response.send_message(
-                                f"{theme.deniedIcon} Error removing configuration: {str(e)}",
+                                f"{theme.deniedIcon} {t('gift.channel.remove_error', lang)}: {str(e)}",
                                 ephemeral=True
                             )
                     
@@ -3576,10 +3685,11 @@ class GiftOperations(commands.Cog):
 
     async def channel_history_scan(self, interaction: discord.Interaction):
         """Perform on-demand historical scan of gift code channels."""
+        lang = _get_lang(interaction)
         admin_info = await self.get_admin_info(interaction.user.id)
         if not admin_info:
             await interaction.response.send_message(
-                f"{theme.deniedIcon} You are not authorized to perform this action.",
+                f"{theme.deniedIcon} {t('gift.error.not_authorized', lang)}",
                 ephemeral=True
             )
             return
@@ -3588,8 +3698,8 @@ class GiftOperations(commands.Cog):
         if not available_alliances:
             await interaction.response.send_message(
                 embed=discord.Embed(
-                    title=f"{theme.deniedIcon} No Available Alliances",
-                    description="You don't have access to any alliances.",
+                    title=f"{theme.deniedIcon} {t('gift.error.no_alliances_title', lang)}",
+                    description=t("gift.error.no_alliances_body", lang),
                     color=theme.emColor2
                 ),
                 ephemeral=True
@@ -3607,8 +3717,8 @@ class GiftOperations(commands.Cog):
         if not channel_configs:
             await interaction.response.send_message(
                 embed=discord.Embed(
-                    title=f"{theme.deniedIcon} No Configured Channels",
-                    description="No gift code channels have been configured yet.\nUse **Channel Management** to set up channels first.",
+                    title=f"{theme.deniedIcon} {t('gift.scan.no_channels_title', lang)}",
+                    description=t("gift.scan.no_channels_body", lang),
                     color=theme.emColor2
                 ),
                 ephemeral=True
@@ -3627,8 +3737,8 @@ class GiftOperations(commands.Cog):
         if not accessible_configs:
             await interaction.response.send_message(
                 embed=discord.Embed(
-                    title=f"{theme.deniedIcon} No Accessible Channels",
-                    description="You don't have access to any configured gift code channels.",
+                    title=f"{theme.deniedIcon} {t('gift.scan.no_access_title', lang)}",
+                    description=t("gift.scan.no_access_body", lang),
                     color=theme.emColor2
                 ),
                 ephemeral=True
@@ -3637,8 +3747,8 @@ class GiftOperations(commands.Cog):
         
         # Create alliance selection menu
         scan_embed = discord.Embed(
-            title=f"{theme.searchIcon} Channel History Scan",
-            description="Select an alliance to scan its message history for potential gift codes:",
+            title=f"{theme.searchIcon} {t('gift.scan.title', lang)}",
+            description=t("gift.scan.select_alliance", lang),
             color=theme.emColor1
         )
         
@@ -3655,12 +3765,12 @@ class GiftOperations(commands.Cog):
             alliance_options.append(discord.SelectOption(
                 label=alliance_name,
                 value=str(alliance_id),
-                description=f"Scan {channel_display}",
+                description=t("gift.scan.option_desc", lang, channel=channel_display),
                 emoji=theme.searchIcon
             ))
         
         alliance_select = discord.ui.Select(
-            placeholder="Select alliance to scan...",
+            placeholder=t("gift.scan.select_placeholder", lang),
             options=alliance_options,
             min_values=1,
             max_values=1
@@ -3680,8 +3790,8 @@ class GiftOperations(commands.Cog):
             if not result:
                 await select_interaction.response.send_message(
                     embed=discord.Embed(
-                        title=f"{theme.deniedIcon} No Channel Configured",
-                        description=f"No gift code channel is configured for {alliance_name}.",
+                        title=f"{theme.deniedIcon} {t('gift.scan.no_channel_title', lang)}",
+                        description=t("gift.scan.no_channel_body", lang, alliance=alliance_name),
                         color=theme.emColor2
                     ),
                     ephemeral=True
@@ -3693,8 +3803,8 @@ class GiftOperations(commands.Cog):
             if not channel:
                 await select_interaction.response.send_message(
                     embed=discord.Embed(
-                        title=f"{theme.deniedIcon} Channel Not Found",
-                        description="The configured channel could not be found.",
+                        title=f"{theme.deniedIcon} {t('gift.scan.channel_not_found_title', lang)}",
+                        description=t("gift.scan.channel_not_found_body", lang),
                         color=theme.emColor2
                     ),
                     ephemeral=True
@@ -3703,16 +3813,15 @@ class GiftOperations(commands.Cog):
             
             # Create confirmation dialog
             confirm_embed = discord.Embed(
-                title=f"{theme.searchIcon} Confirm Historical Scan",
+                title=f"{theme.searchIcon} {t('gift.scan.confirm_title', lang)}",
                 description=(
-                    f"**Scan Details**\n"
+                    f"**{t('gift.scan.details', lang)}**\n"
                     f"{theme.upperDivider}\n"
-                    f"{theme.allianceIcon} **Alliance:** {alliance_name}\n"
-                    f"{theme.announceIcon} **Channel:** #{channel.name}\n"
-                    f"{theme.chartIcon} **Scan Limit:** Up to 75 historical messages\n\n"
-                    f"{theme.warnIcon} **Note:** This will scan historical messages in the channel to find "
-                    f"potential gift codes. Use this carefully in channels with lots of non-gift-code messages.\n\n"
-                    f"Do you want to proceed with the historical scan?"
+                    f"{theme.allianceIcon} **{t('gift.channel.alliance_label', lang)}** {alliance_name}\n"
+                    f"{theme.announceIcon} **{t('gift.channel.channel_label', lang)}** #{channel.name}\n"
+                    f"{theme.chartIcon} **{t('gift.scan.limit', lang)}** {t('gift.scan.limit_value', lang)}\n\n"
+                    f"{theme.warnIcon} **{t('gift.scan.note', lang)}** {t('gift.scan.note_body', lang)}\n\n"
+                    f"{t('gift.scan.proceed', lang)}"
                 ),
                 color=discord.Color.yellow()
             )
@@ -3720,13 +3829,13 @@ class GiftOperations(commands.Cog):
             confirm_view = discord.ui.View(timeout=60)
             
             confirm_button = discord.ui.Button(
-                label="Start Scan",
+                label=t("gift.scan.start_button", lang),
                 style=discord.ButtonStyle.success,
                 emoji=f"{theme.verifiedIcon}"
             )
             
             cancel_button = discord.ui.Button(
-                label="Cancel",
+                label=t("gift.button.cancel", lang),
                 style=discord.ButtonStyle.secondary,
                 emoji=f"{theme.deniedIcon}"
             )
@@ -3750,31 +3859,31 @@ class GiftOperations(commands.Cog):
                 
                 results_text = f"**Scan Complete**\n"
                 results_text += f"{theme.upperDivider}\n"
-                results_text += f"{theme.allianceIcon} **Alliance:** {alliance_name}\n"
-                results_text += f"{theme.announceIcon} **Channel:** #{channel.name}\n"
-                results_text += f"{theme.chartIcon} **Messages Scanned:** {messages_scanned}\n"
-                results_text += f"{theme.giftIcon} **Total Codes Found:** {total_found}\n\n"
+                results_text += f"{theme.allianceIcon} **{t('gift.channel.alliance_label', lang)}** {alliance_name}\n"
+                results_text += f"{theme.announceIcon} **{t('gift.channel.channel_label', lang)}** #{channel.name}\n"
+                results_text += f"{theme.chartIcon} **{t('gift.scan.messages_scanned', lang)}** {messages_scanned}\n"
+                results_text += f"{theme.giftIcon} **{t('gift.scan.total_found', lang)}** {total_found}\n\n"
                 
                 if total_found > 0:
-                    results_text += f"**Validation Results:**\n"
+                    results_text += f"**{t('gift.scan.validation_results', lang)}**\n"
                     if new_valid > 0:
-                        results_text += f"{theme.verifiedIcon} New Valid Codes: {new_valid}\n"
+                        results_text += f"{theme.verifiedIcon} {t('gift.scan.new_valid', lang)} {new_valid}\n"
                     if new_invalid > 0:
-                        results_text += f"{theme.deniedIcon} New Invalid Codes: {new_invalid}\n"
+                        results_text += f"{theme.deniedIcon} {t('gift.scan.new_invalid', lang)} {new_invalid}\n"
                     if existing_valid > 0:
-                        results_text += f"{theme.verifiedIcon} Previously Valid: {existing_valid}\n"
+                        results_text += f"{theme.verifiedIcon} {t('gift.scan.prev_valid', lang)} {existing_valid}\n"
                     if existing_invalid > 0:
-                        results_text += f"{theme.deniedIcon} Previously Invalid: {existing_invalid}\n"
+                        results_text += f"{theme.deniedIcon} {t('gift.scan.prev_invalid', lang)} {existing_invalid}\n"
                     if existing_pending > 0:
-                        results_text += f"{theme.warnIcon} Pending Validation: {existing_pending}\n"
+                        results_text += f"{theme.warnIcon} {t('gift.scan.pending', lang)} {existing_pending}\n"
                     
-                    results_text += f"\n{theme.editListIcon} **Note:** A detailed summary has been posted in #{channel.name}"
+                    results_text += f"\n{theme.editListIcon} **{t('gift.scan.note', lang)}** {t('gift.scan.summary_posted', lang, channel=channel.name)}"
                 else:
-                    results_text += f"No gift codes found in the scanned messages."
+                    results_text += t("gift.scan.none_found", lang)
                 
                 await confirm_interaction.edit_original_response(
                     embed=discord.Embed(
-                        title=f"{theme.searchIcon} History Scan Complete",
+                        title=f"{theme.searchIcon} {t('gift.scan.complete_title', lang)}",
                         description=results_text,
                         color=theme.emColor3
                     ),
@@ -3784,8 +3893,8 @@ class GiftOperations(commands.Cog):
             async def cancel_scan_callback(cancel_interaction: discord.Interaction):
                 await cancel_interaction.response.edit_message(
                     embed=discord.Embed(
-                        title=f"{theme.deniedIcon} Scan Cancelled",
-                        description="History scan has been cancelled.",
+                        title=f"{theme.deniedIcon} {t('gift.scan.cancelled_title', lang)}",
+                        description=t("gift.scan.cancelled_body", lang),
                         color=theme.emColor2
                     ),
                     view=None
@@ -3812,10 +3921,11 @@ class GiftOperations(commands.Cog):
         )
 
     async def setup_giftcode_auto(self, interaction: discord.Interaction):
+        lang = _get_lang(interaction)
         admin_info = await self.get_admin_info(interaction.user.id)
         if not admin_info:
             await interaction.response.send_message(
-                f"{theme.deniedIcon} You are not authorized to perform this action.",
+                f"{theme.deniedIcon} {t('gift.error.not_authorized', lang)}",
                 ephemeral=True
             )
             return
@@ -3824,8 +3934,8 @@ class GiftOperations(commands.Cog):
         if not available_alliances:
             await interaction.response.send_message(
                 embed=discord.Embed(
-                    title=f"{theme.deniedIcon} No Available Alliances",
-                    description="You don't have access to any alliances.",
+                    title=f"{theme.deniedIcon} {t('gift.error.no_alliances_title', lang)}",
+                    description=t("gift.error.no_alliances_body", lang),
                     color=theme.emColor2
                 ),
                 ephemeral=True
@@ -3844,12 +3954,12 @@ class GiftOperations(commands.Cog):
                 alliances_with_counts.append((alliance_id, name, member_count))
 
         auto_gift_embed = discord.Embed(
-            title=f"{theme.settingsIcon} Gift Code Settings",
+            title=f"{theme.settingsIcon} {t('gift.auto.title', lang)}",
             description=(
-                f"Select an alliance to configure automatic redemption:\n\n"
-                f"**Alliance List**\n"
+                f"{t('gift.auto.select_alliance', lang)}\n\n"
+                f"**{t('gift.redeem.alliance_list', lang)}**\n"
                 f"{theme.upperDivider}\n"
-                f"Select an alliance from the list below:\n"
+                f"{t('gift.redeem.select_alliance_hint', lang)}\n"
             ),
             color=theme.emColor1
         )
@@ -3857,16 +3967,16 @@ class GiftOperations(commands.Cog):
         view = AllianceSelectView(alliances_with_counts, self, context="giftcode")
 
         view.current_select.options.insert(0, discord.SelectOption(
-            label="ENABLE ALL ALLIANCES",
+            label=t("gift.auto.enable_all", lang),
             value="enable_all",
-            description="Enable automatic redemption for all alliances",
+            description=t("gift.auto.enable_all_desc", lang),
             emoji=f"{theme.verifiedIcon}"
         ))
 
         view.current_select.options.insert(1, discord.SelectOption(
-            label="DISABLE ALL ALLIANCES",
+            label=t("gift.auto.disable_all", lang),
             value="disable_all",
-            description="Disable automatic redemption for all alliances",
+            description=t("gift.auto.disable_all_desc", lang),
             emoji=f"{theme.deniedIcon}"
         ))
 
@@ -3908,15 +4018,15 @@ class GiftOperations(commands.Cog):
                             )
                     self.conn.commit()
 
-                    status_text = "enabled" if status == 1 else "disabled"
+                    status_text = t("gift.auto.enabled", lang) if status == 1 else t("gift.auto.disabled", lang)
                     success_embed = discord.Embed(
-                        title=f"{theme.verifiedIcon} Automatic Redemption Updated",
+                        title=f"{theme.verifiedIcon} {t('gift.auto.updated_title', lang)}",
                         description=(
-                            f"**Configuration Details**\n"
+                            f"**{t('gift.auto.details', lang)}**\n"
                             f"{theme.upperDivider}\n"
-                            f"{theme.globeIcon} **Scope:** All Alliances\n"
-                            f"{theme.chartIcon} **Status:** Automatic redemption {status_text}\n"
-                            f"{theme.userIcon} **Updated by:** {select_interaction.user.mention}\n"
+                            f"{theme.globeIcon} **{t('gift.auto.scope', lang)}** {t('gift.auto.scope_all', lang)}\n"
+                            f"{theme.chartIcon} **{t('gift.auto.status', lang)}** {t('gift.auto.status_text', lang, status=status_text)}\n"
+                            f"{theme.userIcon} **{t('gift.auto.updated_by', lang)}** {select_interaction.user.mention}\n"
                             f"{theme.lowerDivider}\n"
                         ),
                         color=theme.emColor3
@@ -3929,19 +4039,19 @@ class GiftOperations(commands.Cog):
                     return
 
                 alliance_id = int(selected_value)
-                alliance_name = next((name for aid, name in available_alliances if aid == alliance_id), "Unknown")
+                alliance_name = next((name for aid, name in available_alliances if aid == alliance_id), t("gift.redeem.unknown", lang))
 
-                current_setting = "enabled" if current_status.get(alliance_id, 0) == 1 else "disabled"
+                current_setting = t("gift.auto.enabled", lang) if current_status.get(alliance_id, 0) == 1 else t("gift.auto.disabled", lang)
                 
                 confirm_embed = discord.Embed(
-                    title=f"{theme.settingsIcon} Automatic Redemption Configuration",
+                    title=f"{theme.settingsIcon} {t('gift.auto.config_title', lang)}",
                     description=(
-                        f"**Alliance Details**\n"
+                        f"**{t('gift.auto.alliance_details', lang)}**\n"
                         f"{theme.upperDivider}\n"
-                        f"{theme.allianceIcon} **Alliance:** {alliance_name}\n"
-                        f"{theme.chartIcon} **Current Status:** Automatic redemption is {current_setting}\n"
+                        f"{theme.allianceIcon} **{t('gift.channel.alliance_label', lang)}** {alliance_name}\n"
+                        f"{theme.chartIcon} **{t('gift.auto.current_status', lang)}** {t('gift.auto.current_status_text', lang, status=current_setting)}\n"
                         f"{theme.lowerDivider}\n\n"
-                        f"Do you want to enable or disable automatic redemption for this alliance?"
+                        f"{t('gift.auto.enable_disable_prompt', lang)}"
                     ),
                     color=discord.Color.yellow()
                 )
@@ -3979,15 +4089,15 @@ class GiftOperations(commands.Cog):
                             )
                         self.conn.commit()
 
-                        status_text = "enabled" if status == 1 else "disabled"
+                        status_text = t("gift.auto.enabled", lang) if status == 1 else t("gift.auto.disabled", lang)
                         success_embed = discord.Embed(
-                            title=f"{theme.verifiedIcon} Automatic Redemption Updated",
+                            title=f"{theme.verifiedIcon} {t('gift.auto.updated_title', lang)}",
                             description=(
-                                f"**Configuration Details**\n"
+                                f"**{t('gift.auto.details', lang)}**\n"
                                 f"{theme.upperDivider}\n"
-                                f"{theme.allianceIcon} **Alliance:** {alliance_name}\n"
-                                f"{theme.chartIcon} **Status:** Automatic redemption {status_text}\n"
-                                f"{theme.userIcon} **Updated by:** {button_interaction.user.mention}\n"
+                                f"{theme.allianceIcon} **{t('gift.channel.alliance_label', lang)}** {alliance_name}\n"
+                                f"{theme.chartIcon} **{t('gift.auto.status', lang)}** {t('gift.auto.status_text', lang, status=status_text)}\n"
+                                f"{theme.userIcon} **{t('gift.auto.updated_by', lang)}** {button_interaction.user.mention}\n"
                                 f"{theme.lowerDivider}\n"
                             ),
                             color=theme.emColor3
@@ -4002,17 +4112,17 @@ class GiftOperations(commands.Cog):
                         self.logger.exception(f"Button callback error: {str(e)}")
                         if not button_interaction.response.is_done():
                             await button_interaction.response.send_message(
-                                f"{theme.deniedIcon} An error occurred while updating the settings.",
+                                f"{theme.deniedIcon} {t('gift.auto.update_error', lang)}",
                                 ephemeral=True
                             )
                         else:
                             await button_interaction.followup.send(
-                                f"{theme.deniedIcon} An error occurred while updating the settings.",
+                                f"{theme.deniedIcon} {t('gift.auto.update_error', lang)}",
                                 ephemeral=True
                             )
 
                 confirm_button = discord.ui.Button(
-                    label="Enable",
+                    label=t("gift.auto.enable", lang),
                     emoji=f"{theme.verifiedIcon}",
                     style=discord.ButtonStyle.success,
                     custom_id="confirm"
@@ -4020,7 +4130,7 @@ class GiftOperations(commands.Cog):
                 confirm_button.callback = button_callback
 
                 deny_button = discord.ui.Button(
-                    label="Disable",
+                    label=t("gift.auto.disable", lang),
                     emoji=f"{theme.deniedIcon}",
                     style=discord.ButtonStyle.danger,
                     custom_id="deny"
@@ -4045,12 +4155,12 @@ class GiftOperations(commands.Cog):
                 self.logger.exception(f"Error in alliance selection: {e}")
                 if not select_interaction.response.is_done():
                     await select_interaction.response.send_message(
-                        f"{theme.deniedIcon} An error occurred while processing your selection.",
+                        f"{theme.deniedIcon} {t('gift.error.process_request', lang)}",
                         ephemeral=True
                     )
                 else:
                     await select_interaction.followup.send(
-                        f"{theme.deniedIcon} An error occurred while processing your selection.",
+                        f"{theme.deniedIcon} {t('gift.error.process_request', lang)}",
                         ephemeral=True
                     )
 
@@ -4071,6 +4181,7 @@ class GiftOperations(commands.Cog):
         self.logger.info(f"\nGiftOps: Starting use_giftcode_for_alliance for Alliance {alliance_id}, Code {giftcode}")
 
         try:
+            lang = get_guild_language(None)
             # Initialize error tracking for summary
             error_summary = {}
             
@@ -4091,6 +4202,8 @@ class GiftOperations(commands.Cog):
                 self.logger.error(f"GiftOps: Bot cannot access channel {channel_id} for alliance {alliance_name}.")
                 return False
 
+            lang = get_guild_language(channel.guild.id if channel.guild else None)
+
             # Check if OCR is enabled
             self.settings_cursor.execute("SELECT enabled FROM ocr_settings ORDER BY id DESC LIMIT 1")
             ocr_settings_row = self.settings_cursor.fetchone()
@@ -4098,12 +4211,14 @@ class GiftOperations(commands.Cog):
             
             if not (ocr_enabled == 1 and self.captcha_solver):
                 error_embed = discord.Embed(
-                    title=f"{theme.deniedIcon} OCR/Captcha Solver Disabled",
+                    title=f"{theme.deniedIcon} {t('gift.redeem.ocr_disabled_title', lang)}",
                     description=(
-                        f"**Gift Code:** `{giftcode}`\n"
-                        f"**Alliance:** `{alliance_name}`\n\n"
-                        f"{theme.warnIcon} Gift code redemption requires the OCR/captcha solver to be enabled.\n"
-                        f"Please enable it first using the settings command."
+                        f"**{t('gift.common.details_title', lang)}**\n"
+                        f"{theme.upperDivider}\n"
+                        f"{theme.giftIcon} **{t('gift.common.gift_code_label', lang)}** `{giftcode}`\n"
+                        f"{theme.allianceIcon} **{t('gift.channel.alliance_label', lang)}** `{alliance_name}`\n"
+                        f"{theme.lowerDivider}\n\n"
+                        f"{theme.warnIcon} {t('gift.redeem.ocr_required', lang)}"
                     ),
                     color=theme.emColor2
                 )
@@ -4119,7 +4234,7 @@ class GiftOperations(commands.Cog):
 
             if master_code_status == 'invalid':
                 self.logger.info(f"GiftOps: Code {giftcode} is already marked as 'invalid' in the database.")
-                final_invalid_reason_for_embed = "Code previously marked as invalid"
+                final_invalid_reason_for_embed = t("gift.redeem.invalid_previously", lang)
             else:
                 # If not marked 'invalid' in master table, check with test ID if status is 'pending' or for other cached issues
                 test_fid = self.get_test_fid()
@@ -4135,23 +4250,26 @@ class GiftOperations(commands.Cog):
                             asyncio.create_task(self.api.remove_giftcode(giftcode, from_validation=True))
                         
                         reason_map_fid = {
-                            "TIME_ERROR": "Code has expired (TIME_ERROR)",
-                            "CDK_NOT_FOUND": "Code not found or incorrect (CDK_NOT_FOUND)",
-                            "USAGE_LIMIT": "Usage limit reached (USAGE_LIMIT)"
+                            "TIME_ERROR": t("gift.redeem.invalid_time_error", lang),
+                            "CDK_NOT_FOUND": t("gift.redeem.invalid_cdk_not_found", lang),
+                            "USAGE_LIMIT": t("gift.redeem.invalid_usage_limit", lang)
                         }
-                        final_invalid_reason_for_embed = reason_map_fid.get(fid_status, f"Code invalid ({fid_status})")
+                        final_invalid_reason_for_embed = reason_map_fid.get(
+                            fid_status,
+                            t("gift.redeem.invalid_generic", lang, status=fid_status)
+                        )
 
             if final_invalid_reason_for_embed:
                 error_embed = discord.Embed(
-                    title=f"{theme.deniedIcon} Gift Code Invalid",
+                    title=f"{theme.deniedIcon} {t('gift.redeem.invalid_title', lang)}",
                     description=(
-                        f"**Gift Code Details**\n"
+                        f"**{t('gift.common.details_title', lang)}**\n"
                         f"{theme.upperDivider}\n"
-                        f"{theme.giftIcon} **Gift Code:** `{giftcode}`\n"
-                        f"{theme.allianceIcon} **Alliance:** `{alliance_name}`\n"
-                        f"{theme.deniedIcon} **Status:** {final_invalid_reason_for_embed}\n"
-                        f"{theme.editListIcon} **Action:** Code status is 'invalid' in database\n"
-                        f"{theme.timeIcon} **Time:** <t:{int(datetime.now().timestamp())}:R>\n"
+                        f"{theme.giftIcon} **{t('gift.common.gift_code_label', lang)}** `{giftcode}`\n"
+                        f"{theme.allianceIcon} **{t('gift.channel.alliance_label', lang)}** `{alliance_name}`\n"
+                        f"{theme.deniedIcon} **{t('gift.common.status_label', lang)}** {final_invalid_reason_for_embed}\n"
+                        f"{theme.editListIcon} **{t('gift.common.action_label', lang)}** {t('gift.redeem.invalid_action', lang)}\n"
+                        f"{theme.timeIcon} **{t('gift.common.time_label', lang)}** <t:{int(datetime.now().timestamp())}:R>\n"
                         f"{theme.lowerDivider}\n"
                     ),
                     color=theme.emColor2
@@ -4203,17 +4321,20 @@ class GiftOperations(commands.Cog):
             self.logger.info(f"GiftOps: Pre-processed {len(cached_member_statuses)} members from cache. {len(active_members_to_process)} remaining.")
 
             # Progress Embed
-            embed = discord.Embed(title=f"{theme.giftIcon} Gift Code Redemption: {giftcode}", color=theme.emColor1)
+            embed = discord.Embed(
+                title=f"{theme.giftIcon} {t('gift.redeem.progress_title', lang, code=giftcode)}",
+                color=theme.emColor1
+            )
             def update_embed_description(include_errors=False):
                 base_description = (
-                    f"**Status for Alliance:** `{alliance_name}`\n"
+                    f"**{t('gift.redeem.progress_status_for', lang)}** `{alliance_name}`\n"
                     f"{theme.upperDivider}\n"
-                    f"{theme.membersIcon} **Total Members:** `{total_members}`\n"
-                    f"{theme.verifiedIcon} **Success:** `{success_count}`\n"
-                    f"{theme.infoIcon} **Already Redeemed:** `{received_count}`\n"
-                    f"{theme.refreshIcon} **Retrying:** `{len(retry_queue)}`\n"
-                    f"{theme.deniedIcon} **Failed:** `{failed_count}`\n"
-                    f"{theme.hourglassIcon} **Processed:** `{processed_count}/{total_members}`\n"
+                    f"{theme.membersIcon} **{t('gift.common.total_members_label', lang)}** `{total_members}`\n"
+                    f"{theme.verifiedIcon} **{t('gift.common.success_label', lang)}** `{success_count}`\n"
+                    f"{theme.infoIcon} **{t('gift.common.already_redeemed_label', lang)}** `{received_count}`\n"
+                    f"{theme.refreshIcon} **{t('gift.common.retrying_label', lang)}** `{len(retry_queue)}`\n"
+                    f"{theme.deniedIcon} **{t('gift.common.failed_label', lang)}** `{failed_count}`\n"
+                    f"{theme.hourglassIcon} **{t('gift.common.processed_label', lang)}** `{processed_count}/{total_members}`\n"
                     f"{theme.lowerDivider}\n"
                 )
                 
@@ -4222,29 +4343,30 @@ class GiftOperations(commands.Cog):
                     if non_success_errors:
                         # Define user-friendly messages for each error type
                         error_descriptions = {
-                            "TOO_POOR_SPEND_MORE": f"{theme.warnIcon} **" + "{count}" + "** members failed to spend enough to reach VIP12.",
-                            "TOO_SMALL_SPEND_MORE": f"{theme.warnIcon} **" + "{count}" + "** members failed due to insufficient furnace level.",
-                            "TIMEOUT_RETRY": f"{theme.timeIcon} **" + "{count}" + "** members were staring into the void, until the void finally timed out on them.",
-                            "LOGIN_EXPIRED_MID_PROCESS": f"{theme.lockIcon} **" + "{count}" + "** members login failed mid-process. How'd that even happen?",
-                            "LOGIN_FAILED": f"{theme.lockIcon} **" + "{count}" + "** members failed due to login issues. Try logging it off and on again!",
-                            "CAPTCHA_SOLVING_FAILED": f"{theme.robotIcon} **" + "{count}" + "** members lost the battle against CAPTCHA. You sure those weren't just bots?",
-                            "CAPTCHA_SOLVER_ERROR": f"{theme.settingsIcon} **" + "{count}" + "** members failed due to a CAPTCHA solver issue. We're still trying to solve that one.",
-                            "OCR_DISABLED": f"{theme.deniedIcon} **" + "{count}" + "** members failed since OCR is disabled. Try turning it on first!",
-                            "SIGN_ERROR": f"{theme.lockIcon} **" + "{count}" + "** members failed due to a signature error. Something went wrong.",
-                            "ERROR": f"{theme.deniedIcon} **" + "{count}" + "** members failed due to a general error. Might want to check the logs.",
-                            "UNKNOWN_API_RESPONSE": f"{theme.infoIcon} **" + "{count}" + "** members failed with an unknown API response. Say what?",
-                            "CONNECTION_ERROR": f"{theme.globeIcon} **" + "{count}" + "** members failed due to bot connection issues. Did the admin trip over the cable again?"
+                            "TOO_POOR_SPEND_MORE": ("gift.redeem.error_breakdown.too_poor_spend_more", theme.warnIcon),
+                            "TOO_SMALL_SPEND_MORE": ("gift.redeem.error_breakdown.too_small_spend_more", theme.warnIcon),
+                            "TIMEOUT_RETRY": ("gift.redeem.error_breakdown.timeout_retry", theme.timeIcon),
+                            "LOGIN_EXPIRED_MID_PROCESS": ("gift.redeem.error_breakdown.login_expired_mid_process", theme.lockIcon),
+                            "LOGIN_FAILED": ("gift.redeem.error_breakdown.login_failed", theme.lockIcon),
+                            "CAPTCHA_SOLVING_FAILED": ("gift.redeem.error_breakdown.captcha_solving_failed", theme.robotIcon),
+                            "CAPTCHA_SOLVER_ERROR": ("gift.redeem.error_breakdown.captcha_solver_error", theme.settingsIcon),
+                            "OCR_DISABLED": ("gift.redeem.error_breakdown.ocr_disabled", theme.deniedIcon),
+                            "SIGN_ERROR": ("gift.redeem.error_breakdown.sign_error", theme.lockIcon),
+                            "ERROR": ("gift.redeem.error_breakdown.error", theme.deniedIcon),
+                            "UNKNOWN_API_RESPONSE": ("gift.redeem.error_breakdown.unknown_api_response", theme.infoIcon),
+                            "CONNECTION_ERROR": ("gift.redeem.error_breakdown.connection_error", theme.globeIcon)
                         }
                         
-                        base_description += "\n**Error Breakdown:**\n"
+                        base_description += f"\n**{t('gift.redeem.error_breakdown_title', lang)}**\n"
                         
                         # Build message for each error type
                         for error_type, count in sorted(non_success_errors.items(), key=lambda x: x[1], reverse=True):
                             if error_type in error_descriptions:
-                                base_description += error_descriptions[error_type].format(count=count) + "\n"
+                                key, icon = error_descriptions[error_type]
+                                base_description += f"{icon} {t(key, lang, count=count)}\n"
                             else:
                                 # Handle any unexpected error types
-                                base_description += f"❗ **{count}** members failed with status: {error_type}\n"
+                                base_description += f"{theme.warnIcon} {t('gift.redeem.error_breakdown.unknown', lang, count=count, status=error_type)}\n"
                 
                 return base_description
             embed.description = update_embed_description()
@@ -4307,23 +4429,26 @@ class GiftOperations(commands.Cog):
                         asyncio.create_task(self.api.remove_giftcode(giftcode, from_validation=True))
 
                     reason_map_runtime = {
-                        "TIME_ERROR": "Code has expired (TIME_ERROR)",
-                        "CDK_NOT_FOUND": "Code not found or incorrect (CDK_NOT_FOUND)",
-                        "USAGE_LIMIT": "Usage limit reached (USAGE_LIMIT)"
+                        "TIME_ERROR": t("gift.redeem.invalid_time_error", lang),
+                        "CDK_NOT_FOUND": t("gift.redeem.invalid_cdk_not_found", lang),
+                        "USAGE_LIMIT": t("gift.redeem.invalid_usage_limit", lang)
                     }
-                    status_reason_runtime = reason_map_runtime.get(response_status, f"Code invalid ({response_status})")
+                    status_reason_runtime = reason_map_runtime.get(
+                        response_status,
+                        t("gift.redeem.invalid_generic", lang, status=response_status)
+                    )
                     
-                    embed.title = f"{theme.deniedIcon} Gift Code Invalid: {giftcode}" 
+                    embed.title = f"{theme.deniedIcon} {t('gift.redeem.invalid_runtime_title', lang, code=giftcode)}"
                     embed.color = discord.Color.red()
                     embed.description = (
-                        f"**Gift Code Redemption Halted**\n"
+                        f"**{t('gift.redeem.halted_title', lang)}**\n"
                         f"{theme.upperDivider}\n"
-                        f"{theme.giftIcon} **Gift Code:** `{giftcode}`\n"
-                        f"{theme.allianceIcon} **Alliance:** `{alliance_name}`\n"
-                        f"{theme.deniedIcon} **Reason:** {status_reason_runtime}\n"
-                        f"{theme.editListIcon} **Action:** Code marked as invalid in database. Remaining members for this alliance will not be processed.\n"
-                        f"{theme.chartIcon} **Processed before halt:** {processed_count}/{total_members}\n"
-                        f"{theme.timeIcon} **Time:** <t:{int(datetime.now().timestamp())}:R>\n"
+                        f"{theme.giftIcon} **{t('gift.common.gift_code_label', lang)}** `{giftcode}`\n"
+                        f"{theme.allianceIcon} **{t('gift.channel.alliance_label', lang)}** `{alliance_name}`\n"
+                        f"{theme.deniedIcon} **{t('gift.common.reason_label', lang)}** {status_reason_runtime}\n"
+                        f"{theme.editListIcon} **{t('gift.common.action_label', lang)}** {t('gift.redeem.invalid_action_halt', lang)}\n"
+                        f"{theme.chartIcon} **{t('gift.common.processed_before_halt_label', lang)}** {processed_count}/{total_members}\n"
+                        f"{theme.timeIcon} **{t('gift.common.time_label', lang)}** <t:{int(datetime.now().timestamp())}:R>\n"
                         f"{theme.lowerDivider}\n"
                     )
                     embed.clear_fields()
@@ -4342,17 +4467,17 @@ class GiftOperations(commands.Cog):
                 if response_status == "SIGN_ERROR":
                     self.logger.error(f"GiftOps: Sign error detected (likely wrong encrypt key). Stopping redemption for alliance {alliance_id}.")
                     
-                    embed.title = f"{theme.settingsIcon} Sign Error: {giftcode}"
+                    embed.title = f"{theme.settingsIcon} {t('gift.redeem.sign_error_title', lang, code=giftcode)}"
                     embed.color = discord.Color.red()
                     embed.description = (
-                        f"**Bot Configuration Error**\n"
+                        f"**{t('gift.redeem.sign_error_heading', lang)}**\n"
                         f"{theme.upperDivider}\n"
-                        f"{theme.giftIcon} **Gift Code:** `{giftcode}`\n"
-                        f"{theme.allianceIcon} **Alliance:** `{alliance_name}`\n"
-                        f"{theme.settingsIcon} **Reason:** Sign Error (check bot config/encrypt key)\n"
-                        f"{theme.editListIcon} **Action:** Redemption stopped. Check bot configuration.\n"
-                        f"{theme.chartIcon} **Processed before halt:** {processed_count}/{total_members}\n"
-                        f"{theme.timeIcon} **Time:** <t:{int(datetime.now().timestamp())}:R>\n"
+                        f"{theme.giftIcon} **{t('gift.common.gift_code_label', lang)}** `{giftcode}`\n"
+                        f"{theme.allianceIcon} **{t('gift.channel.alliance_label', lang)}** `{alliance_name}`\n"
+                        f"{theme.settingsIcon} **{t('gift.common.reason_label', lang)}** {t('gift.redeem.sign_error_reason', lang)}\n"
+                        f"{theme.editListIcon} **{t('gift.common.action_label', lang)}** {t('gift.redeem.sign_error_action', lang)}\n"
+                        f"{theme.chartIcon} **{t('gift.common.processed_before_halt_label', lang)}** {processed_count}/{total_members}\n"
+                        f"{theme.timeIcon} **{t('gift.common.time_label', lang)}** <t:{int(datetime.now().timestamp())}:R>\n"
                         f"{theme.lowerDivider}\n"
                     )
                     embed.clear_fields()
@@ -4472,12 +4597,12 @@ class GiftOperations(commands.Cog):
             # Final Embed Update
             if not code_is_invalid:
                 self.logger.info(f"GiftOps: Alliance {alliance_id} processing loop finished. Preparing final update.")
-                final_title = f"{theme.giftIcon} Gift Code Process Complete: {giftcode}"
+                final_title = f"{theme.giftIcon} {t('gift.redeem.complete_title_with_code', lang, code=giftcode)}"
                 final_color = discord.Color.green() if failed_count == 0 and total_members > 0 else \
                               discord.Color.orange() if success_count > 0 or received_count > 0 else \
                               discord.Color.red()
                 if total_members == 0:
-                    final_title = f"{theme.infoIcon} No Members to Process for Code: {giftcode}"
+                    final_title = f"{theme.infoIcon} {t('gift.redeem.no_members_title_with_code', lang, code=giftcode)}"
                     final_color = discord.Color.light_grey()
 
                 embed.title = final_title
@@ -4552,18 +4677,22 @@ class GiftOperations(commands.Cog):
             self.logger.exception(f"GiftOps: UNEXPECTED ERROR in use_giftcode_for_alliance for {alliance_id}/{giftcode}: {str(e)}")
             self.logger.exception(f"Traceback: {traceback.format_exc()}")
             try:
-                if 'channel' in locals() and channel: await channel.send(f"{theme.warnIcon} An unexpected error occurred processing `{giftcode}` for {alliance_name}.")
+                if 'channel' in locals() and channel:
+                    await channel.send(
+                        f"{theme.warnIcon} {t('gift.redeem.unexpected_error', lang, code=giftcode, alliance=alliance_name)}"
+                    )
             except Exception: pass
             return False
 
 class CreateGiftCodeModal(discord.ui.Modal):
-    def __init__(self, cog):
-        super().__init__(title="Create Gift Code")
+    def __init__(self, cog, lang: str):
+        super().__init__(title=t("gift.modal.create_title", lang))
         self.cog = cog
+        self.lang = lang
         
         self.giftcode = discord.ui.TextInput(
-            label="Gift Code",
-            placeholder="Enter the gift code",
+            label=t("gift.modal.create_label", self.lang),
+            placeholder=t("gift.modal.create_placeholder", self.lang),
             required=True,
             min_length=4,
             max_length=20
@@ -4573,20 +4702,21 @@ class CreateGiftCodeModal(discord.ui.Modal):
     async def on_submit(self, interaction: discord.Interaction):
         logger = self.cog.logger
         await interaction.response.defer(ephemeral=True)
+        lang = self.lang
 
         code = self.cog.clean_gift_code(self.giftcode.value)
         logger.info(f"[CreateGiftCodeModal] Code entered: {code}")
-        final_embed = discord.Embed(title=f"{theme.giftIcon} Gift Code Creation Result")
+        final_embed = discord.Embed(title=f"{theme.giftIcon} {t('gift.modal.create_result_title', lang)}")
 
         # Check if code already exists
         self.cog.cursor.execute("SELECT 1 FROM gift_codes WHERE giftcode = ?", (code,))
         if self.cog.cursor.fetchone():
             logger.info(f"[CreateGiftCodeModal] Code {code} already exists in DB.")
-            final_embed.title = f"{theme.infoIcon} Gift Code Exists"
+            final_embed.title = f"{theme.infoIcon} {t('gift.modal.exists_title', lang)}"
             final_embed.description = (
-                f"**Gift Code Details**\n{theme.upperDivider}\n"
-                f"{theme.giftIcon} **Gift Code:** `{code}`\n"
-                f"{theme.verifiedIcon} **Status:** Code already exists in database.\n"
+                f"**{t('gift.common.details_title', lang)}**\n{theme.upperDivider}\n"
+                f"{theme.giftIcon} **{t('gift.common.gift_code_label', lang)}** `{code}`\n"
+                f"{theme.verifiedIcon} **{t('gift.common.status_label', lang)}** {t('gift.modal.exists_status', lang)}\n"
                 f"{theme.lowerDivider}\n"
             )
             final_embed.color = discord.Color.blue()
@@ -4594,8 +4724,8 @@ class CreateGiftCodeModal(discord.ui.Modal):
             logger.info(f"[CreateGiftCodeModal] Validating code {code} before adding to DB.")
             
             validation_embed = discord.Embed(
-                title=f"{theme.refreshIcon} Validating Gift Code...",
-                description=f"Checking if `{code}` is valid...",
+                title=f"{theme.refreshIcon} {t('gift.modal.validation_title', lang)}",
+                description=t("gift.modal.validation_desc", lang, code=code),
                 color=theme.emColor1
             )
             await interaction.edit_original_response(embed=validation_embed)
@@ -4608,12 +4738,12 @@ class CreateGiftCodeModal(discord.ui.Modal):
                 if hasattr(self.cog, 'api') and self.cog.api:
                     asyncio.create_task(self.cog.api.add_giftcode(code))
                 
-                final_embed.title = f"{theme.verifiedIcon} Gift Code Validated"
+                final_embed.title = f"{theme.verifiedIcon} {t('gift.modal.validated_title', lang)}"
                 final_embed.description = (
-                    f"**Gift Code Details**\n{theme.upperDivider}\n"
-                    f"{theme.giftIcon} **Gift Code:** `{code}`\n"
-                    f"{theme.verifiedIcon} **Status:** {validation_msg}\n"
-                    f"{theme.editListIcon} **Action:** Added to database and sent to API\n"
+                    f"**{t('gift.common.details_title', lang)}**\n{theme.upperDivider}\n"
+                    f"{theme.giftIcon} **{t('gift.common.gift_code_label', lang)}** `{code}`\n"
+                    f"{theme.verifiedIcon} **{t('gift.common.status_label', lang)}** {validation_msg}\n"
+                    f"{theme.editListIcon} **{t('gift.common.action_label', lang)}** {t('gift.modal.action_added', lang)}\n"
                     f"{theme.lowerDivider}\n"
                 )
                 final_embed.color = discord.Color.green()
@@ -4621,12 +4751,12 @@ class CreateGiftCodeModal(discord.ui.Modal):
             elif is_valid is False: # Invalid code - do not add
                 logger.warning(f"[CreateGiftCodeModal] Code '{code}' is invalid: {validation_msg}")
                 
-                final_embed.title = f"{theme.deniedIcon} Invalid Gift Code"
+                final_embed.title = f"{theme.deniedIcon} {t('gift.modal.invalid_title', lang)}"
                 final_embed.description = (
-                    f"**Gift Code Details**\n{theme.upperDivider}\n"
-                    f"{theme.giftIcon} **Gift Code:** `{code}`\n"
-                    f"{theme.deniedIcon} **Status:** {validation_msg}\n"
-                    f"{theme.editListIcon} **Action:** Code not added to database\n"
+                    f"**{t('gift.common.details_title', lang)}**\n{theme.upperDivider}\n"
+                    f"{theme.giftIcon} **{t('gift.common.gift_code_label', lang)}** `{code}`\n"
+                    f"{theme.deniedIcon} **{t('gift.common.status_label', lang)}** {validation_msg}\n"
+                    f"{theme.editListIcon} **{t('gift.common.action_label', lang)}** {t('gift.modal.action_not_added', lang)}\n"
                     f"{theme.lowerDivider}\n"
                 )
                 final_embed.color = discord.Color.red()
@@ -4642,20 +4772,20 @@ class CreateGiftCodeModal(discord.ui.Modal):
                     )
                     self.cog.conn.commit()
                     
-                    final_embed.title = f"{theme.warnIcon} Gift Code Added (Pending)"
+                    final_embed.title = f"{theme.warnIcon} {t('gift.modal.pending_title', lang)}"
                     final_embed.description = (
-                        f"**Gift Code Details**\n{theme.upperDivider}\n"
-                        f"{theme.giftIcon} **Gift Code:** `{code}`\n"
-                        f"{theme.warnIcon} **Status:** {validation_msg}\n"
-                        f"{theme.editListIcon} **Action:** Added for later validation\n"
+                        f"**{t('gift.common.details_title', lang)}**\n{theme.upperDivider}\n"
+                        f"{theme.giftIcon} **{t('gift.common.gift_code_label', lang)}** `{code}`\n"
+                        f"{theme.warnIcon} **{t('gift.common.status_label', lang)}** {validation_msg}\n"
+                        f"{theme.editListIcon} **{t('gift.common.action_label', lang)}** {t('gift.modal.action_pending', lang)}\n"
                         f"{theme.lowerDivider}\n"
                     )
                     final_embed.color = discord.Color.yellow()
                     
                 except sqlite3.Error as db_err:
                     logger.exception(f"[CreateGiftCodeModal] DB Error inserting code '{code}': {db_err}")
-                    final_embed.title = f"{theme.deniedIcon} Database Error"
-                    final_embed.description = f"Failed to save gift code `{code}` to the database. Please check logs."
+                    final_embed.title = f"{theme.deniedIcon} {t('gift.modal.db_error_title', lang)}"
+                    final_embed.description = t("gift.modal.db_error_body", lang, code=code)
                     final_embed.color = discord.Color.red()
 
         try:
@@ -4664,24 +4794,27 @@ class CreateGiftCodeModal(discord.ui.Modal):
         except Exception as final_edit_err:
             logger.exception(f"[CreateGiftCodeModal] Failed to edit interaction with final result for {code}: {final_edit_err}")
 
-class DeleteGiftCodeModal(discord.ui.Modal, title="Delete Gift Code"):
-    def __init__(self, cog):
-        super().__init__()
+class DeleteGiftCodeModal(discord.ui.Modal):
+    def __init__(self, cog, lang: str):
+        super().__init__(title=t("gift.modal.delete_title", lang))
         self.cog = cog
+        self.lang = lang
         
-    giftcode = discord.ui.TextInput(
-        label="Gift Code",
-        placeholder="Enter the gift code to delete",
-        required=True
-    )
+        self.giftcode = discord.ui.TextInput(
+            label=t("gift.modal.delete_label", self.lang),
+            placeholder=t("gift.modal.delete_placeholder", self.lang),
+            required=True
+        )
+        self.add_item(self.giftcode)
     
     async def on_submit(self, interaction: discord.Interaction):
+        lang = self.lang
         code = self.giftcode.value
         
         self.cog.cursor.execute("SELECT 1 FROM gift_codes WHERE giftcode = ?", (code,))
         if not self.cog.cursor.fetchone():
             await interaction.response.send_message(
-                f"{theme.deniedIcon} Gift code not found!",
+                f"{theme.deniedIcon} {t('gift.modal.delete_not_found', lang)}",
                 ephemeral=True
             )
             return
@@ -4691,17 +4824,18 @@ class DeleteGiftCodeModal(discord.ui.Modal, title="Delete Gift Code"):
         self.cog.conn.commit()
         
         embed = discord.Embed(
-            title=f"{theme.verifiedIcon} Gift Code Deleted",
-            description=f"Gift code `{code}` has been deleted successfully.",
+            title=f"{theme.verifiedIcon} {t('gift.modal.delete_success_title', lang)}",
+            description=t("gift.modal.delete_success_body", lang, code=code),
             color=theme.emColor3
         )
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-class TestIDModal(discord.ui.Modal, title="Change Test ID"):
-    def __init__(self, cog):
-        super().__init__()
+class TestIDModal(discord.ui.Modal):
+    def __init__(self, cog, lang: str):
+        super().__init__(title=t("gift.ocr.test_id_title", lang))
         self.cog = cog
+        self.lang = lang
         
         try:
             self.cog.settings_cursor.execute("SELECT test_fid FROM test_fid_settings ORDER BY id DESC LIMIT 1")
@@ -4711,8 +4845,8 @@ class TestIDModal(discord.ui.Modal, title="Change Test ID"):
             current_fid = "244886619"
         
         self.test_fid = discord.ui.TextInput(
-            label="Enter New Player ID",
-            placeholder="Example: 244886619",
+            label=t("gift.ocr.test_id_label", self.lang),
+            placeholder=t("gift.ocr.test_id_placeholder", self.lang),
             default=current_fid,
             required=True,
             min_length=1,
@@ -4728,7 +4862,10 @@ class TestIDModal(discord.ui.Modal, title="Change Test ID"):
             new_fid = self.test_fid.value.strip()
             
             if not new_fid.isdigit():
-                await interaction.followup.send(f"{theme.deniedIcon} Invalid ID format. Please enter a numeric ID.", ephemeral=True)
+                await interaction.followup.send(
+                    f"{theme.deniedIcon} {t('gift.ocr.test_id_invalid_format', self.lang)}",
+                    ephemeral=True
+                )
                 return
             
             is_valid, message = await self.cog.verify_test_fid(new_fid)
@@ -4738,13 +4875,13 @@ class TestIDModal(discord.ui.Modal, title="Change Test ID"):
                 
                 if success:
                     embed = discord.Embed(
-                        title=f"{theme.verifiedIcon} Test ID Updated",
+                        title=f"{theme.verifiedIcon} {t('gift.ocr.test_id_updated_title', self.lang)}",
                         description=(
-                            f"**Test ID Configuration**\n"
+                            f"**{t('gift.ocr.test_id_config_title', self.lang)}**\n"
                             f"{theme.upperDivider}\n"
                             f"{theme.fidIcon} **ID:** `{new_fid}`\n"
-                            f"{theme.verifiedIcon} **Status:** Validated\n"
-                            f"{theme.editListIcon} **Action:** Updated in database\n"
+                            f"{theme.verifiedIcon} **{t('gift.common.status_label', self.lang)}** {t('gift.ocr.test_id_status_validated', self.lang)}\n"
+                            f"{theme.editListIcon} **{t('gift.common.action_label', self.lang)}** {t('gift.ocr.test_id_action_updated', self.lang)}\n"
                             f"{theme.lowerDivider}\n"
                         ),
                         color=theme.emColor3
@@ -4753,16 +4890,19 @@ class TestIDModal(discord.ui.Modal, title="Change Test ID"):
                     
                     await self.cog.show_ocr_settings(interaction)
                 else:
-                    await interaction.followup.send(f"{theme.deniedIcon} Failed to update test ID in database. Check logs for details.", ephemeral=True)
+                    await interaction.followup.send(
+                        f"{theme.deniedIcon} {t('gift.ocr.test_id_update_failed', self.lang)}",
+                        ephemeral=True
+                    )
             else:
                 embed = discord.Embed(
-                    title=f"{theme.deniedIcon} Invalid Test ID",
+                    title=f"{theme.deniedIcon} {t('gift.ocr.test_id_invalid_title', self.lang)}",
                     description=(
-                        f"**Test ID Validation**\n"
+                        f"**{t('gift.ocr.test_id_validation_title', self.lang)}**\n"
                         f"{theme.upperDivider}\n"
                         f"{theme.fidIcon} **ID:** `{new_fid}`\n"
-                        f"{theme.deniedIcon} **Status:** Invalid ID\n"
-                        f"{theme.editListIcon} **Reason:** {message}\n"
+                        f"{theme.deniedIcon} **{t('gift.common.status_label', self.lang)}** {t('gift.ocr.test_id_status_invalid', self.lang)}\n"
+                        f"{theme.editListIcon} **{t('gift.common.reason_label', self.lang)}** {message}\n"
                         f"{theme.lowerDivider}\n"
                     ),
                     color=theme.emColor2
@@ -4771,12 +4911,33 @@ class TestIDModal(discord.ui.Modal, title="Change Test ID"):
                 
         except Exception as e:
             self.cog.logger.exception(f"Error updating test ID: {e}")
-            await interaction.followup.send(f"{theme.deniedIcon} An error occurred: {str(e)}", ephemeral=True)
+            await interaction.followup.send(
+                f"{theme.deniedIcon} {t('gift.ocr.test_id_error', self.lang, error=str(e))}",
+                ephemeral=True
+            )
 
 class GiftView(discord.ui.View):
-    def __init__(self, cog):
+    def __init__(self, cog, lang: str):
         super().__init__(timeout=7200)
         self.cog = cog
+        self._apply_language(lang)
+
+    def _apply_language(self, lang: str) -> None:
+        for child in self.children:
+            if not isinstance(child, discord.ui.Button):
+                continue
+            if child.custom_id == "create_gift":
+                child.label = t("gift.button.add", lang)
+            elif child.custom_id == "list_gift":
+                child.label = t("gift.button.list", lang)
+            elif child.custom_id == "use_gift_alliance":
+                child.label = t("gift.button.redeem", lang)
+            elif child.custom_id == "gift_code_settings":
+                child.label = t("gift.button.settings", lang)
+            elif child.custom_id == "delete_gift":
+                child.label = t("gift.button.delete", lang)
+            elif child.custom_id == "main_menu":
+                child.label = t("gift.button.main_menu", lang)
 
     @discord.ui.button(
         label="Add Gift Code",
@@ -4807,10 +4968,11 @@ class GiftView(discord.ui.View):
     )
     async def use_gift_alliance_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
+            lang = _get_lang(interaction)
             admin_info = await self.cog.get_admin_info(interaction.user.id)
             if not admin_info:
                 await interaction.response.send_message(
-                    f"{theme.deniedIcon} You are not authorized to perform this action.",
+                    f"{theme.deniedIcon} {t('gift.error.not_authorized', lang)}",
                     ephemeral=True
                 )
                 return
@@ -4819,8 +4981,8 @@ class GiftView(discord.ui.View):
             if not available_alliances:
                 await interaction.response.send_message(
                     embed=discord.Embed(
-                        title=f"{theme.deniedIcon} No Available Alliances",
-                        description="You don't have access to any alliances.",
+                        title=f"{theme.deniedIcon} {t('gift.error.no_alliances_title', lang)}",
+                        description=t("gift.error.no_alliances_body", lang),
                         color=theme.emColor2
                     ),
                     ephemeral=True
@@ -4836,12 +4998,12 @@ class GiftView(discord.ui.View):
                     alliances_with_counts.append((alliance_id, name, member_count))
 
             alliance_embed = discord.Embed(
-                title=f"{theme.targetIcon} Redeem Gift Code",
+                title=f"{theme.targetIcon} {t('gift.redeem.title', lang)}",
                 description=(
-                    f"Select an alliance to use gift code:\n\n"
-                    f"**Alliance List**\n"
+                    f"{t('gift.redeem.select_alliance', lang)}\n\n"
+                    f"**{t('gift.redeem.alliance_list', lang)}**\n"
                     f"{theme.upperDivider}\n"
-                    f"Select an alliance from the list below:\n"
+                    f"{t('gift.redeem.select_alliance_hint', lang)}\n"
                 ),
                 color=theme.emColor1
             )
@@ -4849,9 +5011,9 @@ class GiftView(discord.ui.View):
             view = AllianceSelectView(alliances_with_counts, self.cog, context="giftcode")
 
             view.current_select.options.insert(0, discord.SelectOption(
-                label="ALL ALLIANCES",
+                label=t("gift.redeem.all_alliances", lang),
                 value="all",
-                description=f"Apply to all {len(alliances_with_counts)} alliances",
+                description=t("gift.redeem.all_alliances_desc", lang, count=len(alliances_with_counts)),
                 emoji=theme.globeIcon
             ))
 
@@ -4889,30 +5051,30 @@ class GiftView(discord.ui.View):
 
                     if not gift_codes:
                         await select_interaction.response.edit_message(
-                            content="No active gift codes available.",
+                            content=t("gift.redeem.no_active_codes", lang),
                             embed=None,
                             view=None
                         )
                         return
 
                     giftcode_embed = discord.Embed(
-                        title=f"{theme.giftIcon} Select Gift Code",
+                        title=f"{theme.giftIcon} {t('gift.redeem.select_code_title', lang)}",
                         description=(
-                            f"Select a gift code to use:\n\n"
-                            f"**Gift Code List**\n"
+                            f"{t('gift.redeem.select_code', lang)}\n\n"
+                            f"**{t('gift.redeem.code_list', lang)}**\n"
                             f"{theme.upperDivider}\n"
-                            f"Select a gift code from the list below:\n"
+                            f"{t('gift.redeem.select_code_hint', lang)}\n"
                         ),
                         color=theme.emColor1
                     )
 
                     select_giftcode = discord.ui.Select(
-                        placeholder="Select a gift code",
+                        placeholder=t("gift.redeem.select_code_placeholder", lang),
                         options=[
                             discord.SelectOption(
                                 label=f"Code: {code}",
                                 value=code,
-                                description=f"Created: {date}",
+                                description=t("gift.redeem.code_created", lang, date=date),
                                 emoji=theme.giftIcon
                             ) for code, date in gift_codes
                         ]
@@ -4920,9 +5082,9 @@ class GiftView(discord.ui.View):
 
                     # Add ALL CODES option at the beginning
                     select_giftcode.options.insert(0, discord.SelectOption(
-                        label="ALL CODES",
+                        label=t("gift.redeem.all_codes", lang),
                         value="all_codes",
-                        description=f"Redeem all {len(gift_codes)} active codes",
+                        description=t("gift.redeem.all_codes_desc", lang, count=len(gift_codes)),
                         emoji=theme.packageIcon
                     ))
 
@@ -4933,23 +5095,23 @@ class GiftView(discord.ui.View):
                             # Handle ALL CODES selection
                             if selected_code_value == "all_codes":
                                 selected_codes = [code for code, date in gift_codes]
-                                code_display = f"ALL ({len(selected_codes)} codes)"
+                                code_display = t("gift.redeem.code_all_display", lang, count=len(selected_codes))
                             else:
                                 selected_codes = [selected_code_value]
                                 code_display = f"`{selected_code_value}`"
 
-                            alliance_display = 'ALL' if selected_value == 'all' else next((name for aid, name, _ in alliances_with_counts if aid == alliance_id), 'Unknown')
+                            alliance_display = t("gift.redeem.all", lang) if selected_value == 'all' else next((name for aid, name, _ in alliances_with_counts if aid == alliance_id), t("gift.redeem.unknown", lang))
                             total_redemptions = len(selected_codes) * len(all_alliances)
 
                             confirm_embed = discord.Embed(
-                                title=f"{theme.warnIcon} Confirm Gift Code Usage",
+                                title=f"{theme.warnIcon} {t('gift.redeem.confirm_title', lang)}",
                                 description=(
-                                    f"Are you sure you want to use {'these gift codes' if len(selected_codes) > 1 else 'this gift code'}?\n\n"
-                                    f"**Details**\n"
+                                    f"{t('gift.redeem.confirm_body_multi', lang) if len(selected_codes) > 1 else t('gift.redeem.confirm_body_single', lang)}\n\n"
+                                    f"**{t('gift.redeem.details', lang)}**\n"
                                     f"{theme.upperDivider}\n"
-                                    f"{theme.giftIcon} **Gift Code{'s' if len(selected_codes) > 1 else ''}:** {code_display}\n"
-                                    f"{theme.allianceIcon} **Alliances:** {alliance_display} ({len(all_alliances)})\n"
-                                    f"{theme.chartIcon} **Total redemptions:** {total_redemptions}\n"
+                                    f"{theme.giftIcon} **{t('gift.redeem.codes_label', lang, plural='s' if len(selected_codes) > 1 else '')}** {code_display}\n"
+                                    f"{theme.allianceIcon} **{t('gift.redeem.alliances_label', lang)}** {alliance_display} ({len(all_alliances)})\n"
+                                    f"{theme.chartIcon} **{t('gift.redeem.total_redemptions', lang)}** {total_redemptions}\n"
                                     f"{theme.lowerDivider}\n"
                                 ),
                                 color=discord.Color.yellow()
@@ -4975,7 +5137,7 @@ class GiftView(discord.ui.View):
 
                                     alliance_list = ", ".join(alliance_names)
                                     if len(all_alliances) > 3:
-                                        alliance_list += f" and {len(all_alliances) - 3} more"
+                                        alliance_list += f" {t('gift.redeem.and_more', lang, count=len(all_alliances) - 3)}"
 
                                     queue_summary = []
                                     your_position = None
@@ -4991,24 +5153,24 @@ class GiftView(discord.ui.View):
                                     queue_info = "\n".join(queue_summary) if queue_summary else "Queue is empty"
 
                                     queue_embed = discord.Embed(
-                                        title=f"{theme.verifiedIcon} Redemptions Queued Successfully",
+                                        title=f"{theme.verifiedIcon} {t('gift.redeem.queued_title', lang)}",
                                         description=(
-                                            f"Gift code redemptions added to the queue.\n\n"
-                                            f"**Your Redemption**\n"
+                                            f"{t('gift.redeem.queued_body', lang)}\n\n"
+                                            f"**{t('gift.redeem.your_redemption', lang)}**\n"
                                             f"{theme.upperDivider}\n"
-                                            f"{theme.giftIcon} **Gift Code{'s' if len(selected_codes) > 1 else ''}:** {code_display}\n"
-                                            f"{theme.allianceIcon} **Alliances:** {alliance_list}\n"
-                                            f"{theme.chartIcon} **Total redemptions:** {len(selected_codes) * len(all_alliances)}\n"
+                                            f"{theme.giftIcon} **{t('gift.redeem.codes_label', lang, plural='s' if len(selected_codes) > 1 else '')}** {code_display}\n"
+                                            f"{theme.allianceIcon} **{t('gift.redeem.alliances_label', lang)}** {alliance_list}\n"
+                                            f"{theme.chartIcon} **{t('gift.redeem.total_redemptions', lang)}** {len(selected_codes) * len(all_alliances)}\n"
                                             f"{theme.lowerDivider}\n\n"
-                                            f"**Full Queue Details**\n"
+                                            f"**{t('gift.redeem.queue_details', lang)}**\n"
                                             f"{queue_info}\n\n"
-                                            f"{theme.chartIcon} **Total items in queue:** {queue_status['queue_length']}\n"
-                                            f"{theme.pinIcon} **Your position:** #{your_position if your_position else 'Processing'}\n\n"
-                                            f"{theme.infoIcon} You'll receive notifications as each alliance is processed."
+                                            f"{theme.chartIcon} **{t('gift.redeem.queue_total', lang)}** {queue_status['queue_length']}\n"
+                                            f"{theme.pinIcon} **{t('gift.redeem.queue_position', lang)}** #{your_position if your_position else t('gift.redeem.queue_processing', lang)}\n\n"
+                                            f"{theme.infoIcon} {t('gift.redeem.queue_notify', lang)}"
                                         ),
                                         color=theme.emColor3
                                     )
-                                    queue_embed.set_footer(text="Gift codes are processed sequentially to prevent issues.")
+                                    queue_embed.set_footer(text=t("gift.redeem.queue_footer", lang))
 
                                     await button_interaction.edit_original_response(
                                         embed=queue_embed,
@@ -5018,14 +5180,14 @@ class GiftView(discord.ui.View):
                                 except Exception as e:
                                     self.logger.exception(f"Error queueing gift code redemptions: {e}")
                                     await button_interaction.followup.send(
-                                        f"{theme.deniedIcon} An error occurred while queueing the gift code redemptions.",
+                                        f"{theme.deniedIcon} {t('gift.error.queue_failed', lang)}",
                                         ephemeral=True
                                     )
 
                             async def cancel_callback(button_interaction: discord.Interaction):
                                 cancel_embed = discord.Embed(
-                                    title=f"{theme.deniedIcon} Operation Cancelled",
-                                    description="The gift code usage has been cancelled.",
+                                    title=f"{theme.deniedIcon} {t('gift.redeem.cancelled_title', lang)}",
+                                    description=t("gift.redeem.cancelled_body", lang),
                                     color=theme.emColor2
                                 )
                                 await button_interaction.response.edit_message(
@@ -5034,12 +5196,12 @@ class GiftView(discord.ui.View):
                                 )
 
                             confirm_button = discord.ui.Button(
-                                label="Confirm",
+                                label=t("gift.button.confirm", lang),
                                 style=discord.ButtonStyle.success,
                                 emoji=f"{theme.verifiedIcon}"
                             )
                             cancel_button = discord.ui.Button(
-                                label="Cancel",
+                                label=t("gift.button.cancel", lang),
                                 style=discord.ButtonStyle.danger,
                                 emoji=f"{theme.deniedIcon}"
                             )
@@ -5057,7 +5219,7 @@ class GiftView(discord.ui.View):
                         except Exception as e:
                             self.logger.exception(f"Gift code callback error: {e}")
                             await giftcode_interaction.response.send_message(
-                                f"{theme.deniedIcon} An error occurred while processing the gift code.",
+                                f"{theme.deniedIcon} {t('gift.error.process_gift', lang)}",
                                 ephemeral=True
                             )
 
@@ -5072,7 +5234,7 @@ class GiftView(discord.ui.View):
                 except Exception as e:
                     self.logger.exception(f"Alliance callback error: {e}")
                     await select_interaction.response.send_message(
-                        f"{theme.deniedIcon} An error occurred while processing the alliance selection.",
+                        f"{theme.deniedIcon} {t('gift.error.process_alliance', lang)}",
                         ephemeral=True
                     )
 
@@ -5085,7 +5247,7 @@ class GiftView(discord.ui.View):
         except Exception as e:
             self.logger.exception(f"Use gift alliance button error: {e}")
             await interaction.response.send_message(
-                f"{theme.deniedIcon} An error occurred while processing the request.",
+                f"{theme.deniedIcon} {t('gift.error.process_request', _get_lang(interaction))}",
                 ephemeral=True
             )
 
@@ -5112,7 +5274,7 @@ class GiftView(discord.ui.View):
         except Exception as e:
             self.logger.exception(f"Delete gift button error: {e}")
             await interaction.response.send_message(
-                f"{theme.deniedIcon} An error occurred while processing delete request.",
+                f"{theme.deniedIcon} {t('gift.error.delete_request', _get_lang(interaction))}",
                 ephemeral=True
             )
 
@@ -5136,18 +5298,36 @@ class GiftView(discord.ui.View):
             pass
 
 class SettingsMenuView(discord.ui.View):
-    def __init__(self, cog, is_global: bool = False):
+    def __init__(self, cog, is_global: bool = False, lang: str = "en"):
         super().__init__(timeout=7200)
         self.cog = cog
         self.is_global = is_global
+        self._apply_language(lang)
 
         # Disable global-admin-only buttons for non-global admins
         if not is_global:
             for child in self.children:
-                if isinstance(child, discord.ui.Button) and child.label in [
-                    "Redemption Priority", "CAPTCHA Settings"
+                if isinstance(child, discord.ui.Button) and child.custom_id in [
+                    "redemption_priority", "captcha_settings"
                 ]:
                     child.disabled = True
+
+    def _apply_language(self, lang: str) -> None:
+        for child in self.children:
+            if not isinstance(child, discord.ui.Button):
+                continue
+            if child.custom_id == "channel_management":
+                child.label = t("gift.settings.channel_mgmt", lang)
+            elif child.custom_id == "auto_gift_settings":
+                child.label = t("gift.settings.auto_redemption", lang)
+            elif child.custom_id == "redemption_priority":
+                child.label = t("gift.settings.priority", lang)
+            elif child.custom_id == "channel_history_scan":
+                child.label = t("gift.settings.history_scan", lang)
+            elif child.custom_id == "captcha_settings":
+                child.label = t("gift.settings.captcha", lang)
+            elif child.custom_id == "back_to_main":
+                child.label = t("language.back", lang)
 
     @discord.ui.button(
         label="Channel Management",
@@ -5210,25 +5390,26 @@ class SettingsMenuView(discord.ui.View):
         await self.cog.show_gift_menu(interaction)
 
 class RedemptionPriorityView(discord.ui.View):
-    def __init__(self, cog, alliances_with_priority):
+    def __init__(self, cog, alliances_with_priority, lang: str):
         super().__init__(timeout=7200)
         self.cog = cog
         self.alliances = alliances_with_priority  # List of (alliance_id, name, priority)
         self.selected_alliance_id = None
+        self.lang = lang
 
         # Alliance select menu
         options = [
             discord.SelectOption(
                 label=f"{idx}. {name}",
                 value=str(alliance_id),
-                description=f"Priority position {idx}"
+                description=t("gift.priority.position", lang, position=idx)
             )
             for idx, (alliance_id, name, _) in enumerate(self.alliances, 1)
         ]
 
         if options:
             self.alliance_select = discord.ui.Select(
-                placeholder="Select an alliance to move",
+                placeholder=t("gift.priority.select_placeholder", lang),
                 options=options[:25],  # Discord limit
                 row=0
             )
@@ -5240,8 +5421,8 @@ class RedemptionPriorityView(discord.ui.View):
 
         # Update embed to show selected alliance with marker
         embed = discord.Embed(
-            title=f"{theme.chartIcon} Redemption Priority",
-            description="Configure the order in which alliances receive gift codes.\nSelect an alliance and use the buttons to change its position.",
+            title=f"{theme.chartIcon} {t('gift.priority.title', self.lang)}",
+            description=t("gift.priority.description", self.lang),
             color=theme.emColor1
         )
 
@@ -5251,8 +5432,8 @@ class RedemptionPriorityView(discord.ui.View):
             priority_list.append(f"`{idx}.` **{name}**{marker}")
 
         embed.add_field(
-            name="Current Priority Order",
-            value="\n".join(priority_list) if priority_list else "No alliances configured",
+            name=t("gift.priority.current_order", self.lang),
+            value="\n".join(priority_list) if priority_list else t("gift.priority.none", self.lang),
             inline=False
         )
 
@@ -5261,13 +5442,13 @@ class RedemptionPriorityView(discord.ui.View):
     @discord.ui.button(label="Move Up", style=discord.ButtonStyle.primary, emoji=f"{theme.upIcon}", row=1)
     async def move_up_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self.selected_alliance_id:
-            await interaction.response.send_message("Please select an alliance first.", ephemeral=True)
+            await interaction.response.send_message(t("gift.priority.select_first", self.lang), ephemeral=True)
             return
 
         # Find current position
         current_idx = next((i for i, (aid, _, _) in enumerate(self.alliances) if aid == self.selected_alliance_id), None)
         if current_idx is None or current_idx == 0:
-            await interaction.response.send_message("Alliance is already at the top.", ephemeral=True)
+            await interaction.response.send_message(t("gift.priority.already_top", self.lang), ephemeral=True)
             return
 
         # Swap with the alliance above
@@ -5277,13 +5458,13 @@ class RedemptionPriorityView(discord.ui.View):
     @discord.ui.button(label="Move Down", style=discord.ButtonStyle.primary, emoji=f"{theme.downIcon}", row=1)
     async def move_down_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self.selected_alliance_id:
-            await interaction.response.send_message("Please select an alliance first.", ephemeral=True)
+            await interaction.response.send_message(t("gift.priority.select_first", self.lang), ephemeral=True)
             return
 
         # Find current position
         current_idx = next((i for i, (aid, _, _) in enumerate(self.alliances) if aid == self.selected_alliance_id), None)
         if current_idx is None or current_idx >= len(self.alliances) - 1:
-            await interaction.response.send_message("Alliance is already at the bottom.", ephemeral=True)
+            await interaction.response.send_message(t("gift.priority.already_bottom", self.lang), ephemeral=True)
             return
 
         # Swap with the alliance below
@@ -5294,8 +5475,8 @@ class RedemptionPriorityView(discord.ui.View):
     async def done_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.edit_message(
             embed=discord.Embed(
-                title=f"{theme.chartIcon} Priority Updated",
-                description="Redemption priority order has been saved.",
+                title=f"{theme.chartIcon} {t('gift.priority.updated_title', self.lang)}",
+                description=t("gift.priority.updated_body", self.lang),
                 color=theme.emColor3
             ),
             view=None
@@ -5334,8 +5515,8 @@ class RedemptionPriorityView(discord.ui.View):
         """Refresh the embed and view after a priority change."""
         # Rebuild embed
         embed = discord.Embed(
-            title=f"{theme.chartIcon} Redemption Priority",
-            description="Configure the order in which alliances receive gift codes.\nSelect an alliance and use the buttons to change its position.",
+            title=f"{theme.chartIcon} {t('gift.priority.title', self.lang)}",
+            description=t("gift.priority.description", self.lang),
             color=theme.emColor1
         )
 
@@ -5345,8 +5526,8 @@ class RedemptionPriorityView(discord.ui.View):
             priority_list.append(f"`{idx}.` **{name}**{marker}")
 
         embed.add_field(
-            name="Current Priority Order",
-            value="\n".join(priority_list) if priority_list else "No alliances configured",
+            name=t("gift.priority.current_order", self.lang),
+            value="\n".join(priority_list) if priority_list else t("gift.priority.none", self.lang),
             inline=False
         )
 
@@ -5355,7 +5536,7 @@ class RedemptionPriorityView(discord.ui.View):
             discord.SelectOption(
                 label=f"{idx}. {name}",
                 value=str(alliance_id),
-                description=f"Priority position {idx}"
+                description=t("gift.priority.position", self.lang, position=idx)
             )
             for idx, (alliance_id, name, _) in enumerate(self.alliances, 1)
         ]
@@ -5366,11 +5547,19 @@ class RedemptionPriorityView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
 
 class ClearCacheConfirmView(discord.ui.View):
-    def __init__(self, parent_cog):
+    def __init__(self, parent_cog, lang: str):
         super().__init__(timeout=60)
         self.parent_cog = parent_cog
+        self.lang = lang
+        for child in self.children:
+            if not isinstance(child, discord.ui.Button):
+                continue
+            if child.label == "Confirm":
+                child.label = t("gift.ocr.cache_confirm_button", self.lang)
+            elif child.label == "Cancel":
+                child.label = t("gift.button.cancel", self.lang)
 
-    @discord.ui.button(label="Confirm Clear", style=discord.ButtonStyle.danger, emoji=f"{theme.verifiedIcon}")
+    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.danger, emoji=f"{theme.verifiedIcon}")
     async def confirm_clear(self, interaction: discord.Interaction, button: discord.ui.Button):
         try: # Clear the user_giftcodes table
             self.parent_cog.cursor.execute("DELETE FROM user_giftcodes")
@@ -5378,8 +5567,8 @@ class ClearCacheConfirmView(discord.ui.View):
             self.parent_cog.conn.commit()
             
             success_embed = discord.Embed(
-                title=f"{theme.verifiedIcon} Redemption Cache Cleared",
-                description=f"Successfully deleted {deleted_count:,} redemption records.\n\nUsers can now attempt to redeem gift codes again.",
+                title=f"{theme.verifiedIcon} {t('gift.ocr.cache_cleared_title', self.lang)}",
+                description=t("gift.ocr.cache_cleared_body", self.lang, count=f"{deleted_count:,}"),
                 color=theme.emColor3
             )
             
@@ -5390,8 +5579,8 @@ class ClearCacheConfirmView(discord.ui.View):
         except Exception as e:
             self.parent_cog.logger.exception(f"Error clearing redemption cache: {e}")
             error_embed = discord.Embed(
-                title=f"{theme.deniedIcon} Error",
-                description=f"Failed to clear redemption cache: {str(e)}",
+                title=f"{theme.deniedIcon} {t('gift.ocr.cache_clear_error_title', self.lang)}",
+                description=t("gift.ocr.cache_clear_error_body", self.lang, error=str(e)),
                 color=theme.emColor2
             )
             try:
@@ -5402,8 +5591,8 @@ class ClearCacheConfirmView(discord.ui.View):
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, emoji=f"{theme.deniedIcon}")
     async def cancel_clear(self, interaction: discord.Interaction, button: discord.ui.Button):
         cancel_embed = discord.Embed(
-            title=f"{theme.deniedIcon} Operation Cancelled",
-            description="Redemption cache was not cleared.",
+            title=f"{theme.deniedIcon} {t('gift.ocr.cache_cancelled_title', self.lang)}",
+            description=t("gift.ocr.cache_cancelled_body", self.lang),
             color=theme.emColor1
         )
         await interaction.response.edit_message(embed=cancel_embed, view=None)
@@ -5414,27 +5603,28 @@ class ClearCacheConfirmView(discord.ui.View):
             item.disabled = True
         try:
             timeout_embed = discord.Embed(
-                title=f"{theme.timeIcon} Timeout",
-                description="Confirmation timed out. Redemption cache was not cleared.",
+                title=f"{theme.timeIcon} {t('gift.ocr.cache_timeout_title', self.lang)}",
+                description=t("gift.ocr.cache_timeout_body", self.lang),
                 color=discord.Color.orange()
             )
         except:
             pass
 
 class OCRSettingsView(discord.ui.View):
-    def __init__(self, cog, ocr_settings, onnx_available):
+    def __init__(self, cog, ocr_settings, onnx_available, lang: str):
         super().__init__(timeout=7200)
         self.cog = cog
         self.enabled = ocr_settings[0]
         self.save_images_setting = ocr_settings[1]
         self.onnx_available = onnx_available
         self.disable_controls = not onnx_available
+        self.lang = lang
 
         # Row 0: Enable/Disable Button, Test Button
         self.enable_ocr_button_item = discord.ui.Button(
             emoji=f"{theme.verifiedIcon}" if self.enabled == 1 else "🚫",
             custom_id="enable_ocr", row=0,
-            label="Disable CAPTCHA Solver" if self.enabled == 1 else "Enable CAPTCHA Solver",
+            label=t("gift.ocr.button.disable_solver", self.lang) if self.enabled == 1 else t("gift.ocr.button.enable_solver", self.lang),
             style=discord.ButtonStyle.danger if self.enabled == 1 else discord.ButtonStyle.success,
             disabled=self.disable_controls
         )
@@ -5442,7 +5632,7 @@ class OCRSettingsView(discord.ui.View):
         self.add_item(self.enable_ocr_button_item)
 
         self.test_ocr_button_item = discord.ui.Button(
-            label="Test CAPTCHA Solver", style=discord.ButtonStyle.secondary, emoji=f"{theme.testIcon}",
+            label=t("gift.ocr.button.test_solver", self.lang), style=discord.ButtonStyle.secondary, emoji=f"{theme.testIcon}",
             custom_id="test_ocr", row=0,
             disabled=self.disable_controls
         )
@@ -5451,7 +5641,7 @@ class OCRSettingsView(discord.ui.View):
 
         # Add the Change Test ID Button
         self.change_test_fid_button_item = discord.ui.Button(
-            label="Change Test ID", style=discord.ButtonStyle.primary, emoji=f"{theme.refreshIcon}",
+            label=t("gift.ocr.button.change_test_id", self.lang), style=discord.ButtonStyle.primary, emoji=f"{theme.refreshIcon}",
             custom_id="change_test_fid", row=0,
             disabled=self.disable_controls
         )
@@ -5460,7 +5650,7 @@ class OCRSettingsView(discord.ui.View):
 
         # Add the Clear Redemption Cache Button
         self.clear_cache_button_item = discord.ui.Button(
-            label="Clear Redemption Cache", style=discord.ButtonStyle.danger, emoji=f"{theme.trashIcon}",
+            label=t("gift.ocr.button.clear_cache", self.lang), style=discord.ButtonStyle.danger, emoji=f"{theme.trashIcon}",
             custom_id="clear_redemption_cache", row=1,
             disabled=self.disable_controls
         )
@@ -5469,13 +5659,29 @@ class OCRSettingsView(discord.ui.View):
 
         # Row 2: Image Save Select Menu
         self.image_save_select_item = discord.ui.Select(
-            placeholder="Select Captcha Image Saving Option",
+            placeholder=t("gift.ocr.select.placeholder", self.lang),
             min_values=1, max_values=1, row=2, custom_id="image_save_select",
             options=[
-                discord.SelectOption(label="Don't Save Any Images", value="0", description="Fastest, no disk usage"),
-                discord.SelectOption(label="Save Only Failed Captchas", value="1", description="For debugging server rejects"),
-                discord.SelectOption(label="Save Only Successful Captchas", value="2", description="To see what worked"),
-                discord.SelectOption(label="Save All Captchas (High Disk Usage!)", value="3", description="Comprehensive debugging")
+                discord.SelectOption(
+                    label=t("gift.ocr.select.none", self.lang),
+                    value="0",
+                    description=t("gift.ocr.select.none_desc", self.lang)
+                ),
+                discord.SelectOption(
+                    label=t("gift.ocr.select.failed", self.lang),
+                    value="1",
+                    description=t("gift.ocr.select.failed_desc", self.lang)
+                ),
+                discord.SelectOption(
+                    label=t("gift.ocr.select.success", self.lang),
+                    value="2",
+                    description=t("gift.ocr.select.success_desc", self.lang)
+                ),
+                discord.SelectOption(
+                    label=t("gift.ocr.select.all", self.lang),
+                    value="3",
+                    description=t("gift.ocr.select.all_desc", self.lang)
+                )
             ],
             disabled=self.disable_controls
         )
@@ -5487,18 +5693,24 @@ class OCRSettingsView(discord.ui.View):
     async def change_test_fid_button(self, interaction: discord.Interaction):
         """Handle the change test ID button click."""
         if not self.onnx_available:
-            await interaction.response.send_message(f"{theme.deniedIcon} Required library (onnxruntime) is not installed or failed to load.", ephemeral=True)
+            await interaction.response.send_message(
+                f"{theme.deniedIcon} {t('gift.ocr.error.onnx_missing', self.lang)}",
+                ephemeral=True
+            )
             return
-        await interaction.response.send_modal(TestIDModal(self.cog))
+        await interaction.response.send_modal(TestIDModal(self.cog, self.lang))
 
     async def enable_ocr_button(self, interaction: discord.Interaction):
         if not self.onnx_available:
-            await interaction.response.send_message(f"{theme.deniedIcon} Required library (onnxruntime) is not installed or failed to load.", ephemeral=True)
+            await interaction.response.send_message(
+                f"{theme.deniedIcon} {t('gift.ocr.error.onnx_missing', self.lang)}",
+                ephemeral=True
+            )
             return
         
         await interaction.response.defer(ephemeral=True)
         new_enabled = 1 if self.enabled == 0 else 0
-        success, message = await self.cog.update_ocr_settings(interaction, enabled=new_enabled)
+        success, message = await self.cog.update_ocr_settings(interaction, enabled=new_enabled, lang=self.lang)
         await self.cog.show_ocr_settings(interaction)
 
     async def test_ocr_button(self, interaction: discord.Interaction):
@@ -5507,16 +5719,25 @@ class OCRSettingsView(discord.ui.View):
         current_time = time.time()
 
         if not self.onnx_available:
-            await interaction.response.send_message(f"{theme.deniedIcon} Required library (onnxruntime) is not installed or failed to load.", ephemeral=True)
+            await interaction.response.send_message(
+                f"{theme.deniedIcon} {t('gift.ocr.error.onnx_missing', self.lang)}",
+                ephemeral=True
+            )
             return
         if not self.cog.captcha_solver or not self.cog.captcha_solver.is_initialized:
-            await interaction.response.send_message(f"{theme.deniedIcon} CAPTCHA solver is not initialized. Ensure OCR is enabled.", ephemeral=True)
+            await interaction.response.send_message(
+                f"{theme.deniedIcon} {t('gift.ocr.error.solver_not_ready', self.lang)}",
+                ephemeral=True
+            )
             return
 
         last_test_time = self.cog.test_captcha_cooldowns.get(user_id, 0)
         if current_time - last_test_time < self.cog.test_captcha_delay:
             remaining_time = int(self.cog.test_captcha_delay - (current_time - last_test_time))
-            await interaction.response.send_message(f"{theme.deniedIcon} Please wait {remaining_time} more seconds before testing again.", ephemeral=True)
+            await interaction.response.send_message(
+                f"{theme.deniedIcon} {t('gift.ocr.error.test_cooldown', self.lang, seconds=remaining_time)}",
+                ephemeral=True
+            )
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -5541,12 +5762,18 @@ class OCRSettingsView(discord.ui.View):
                 player_info_json = response_stove_info.json()
                 if player_info_json.get("msg") != "success":
                     logger.error(f"[Test Button] Login failed for test ID {test_fid}: {player_info_json.get('msg')}")
-                    await interaction.followup.send(f"{theme.deniedIcon} Login failed with test ID {test_fid}. Please check if the ID is valid.", ephemeral=True)
+                    await interaction.followup.send(
+                        f"{theme.deniedIcon} {t('gift.ocr.test_login_failed', self.lang, test_id=test_fid)}",
+                        ephemeral=True
+                    )
                     return
                 logger.info(f"[Test Button] Successfully logged in with test ID {test_fid}")
             except Exception as json_err:
                 logger.error(f"[Test Button] Error parsing login response: {json_err}")
-                await interaction.followup.send(f"{theme.deniedIcon} Error processing login response.", ephemeral=True)
+                await interaction.followup.send(
+                    f"{theme.deniedIcon} {t('gift.ocr.test_login_parse_error', self.lang)}",
+                    ephemeral=True
+                )
                 return
             
             logger.info(f"[Test Button] Fetching captcha for test ID {test_fid} using established session...")
@@ -5554,7 +5781,10 @@ class OCRSettingsView(discord.ui.View):
             logger.info(f"[Test Button] Captcha fetch result: Error='{error}', HasImage={captcha_image_base64 is not None}")
 
             if error:
-                await interaction.followup.send(f"{theme.deniedIcon} Error fetching test captcha from the API: `{error}`", ephemeral=True)
+                await interaction.followup.send(
+                    f"{theme.deniedIcon} {t('gift.ocr.test_fetch_error', self.lang, error=error)}",
+                    ephemeral=True
+                )
                 return
 
             if captcha_image_base64:
@@ -5567,11 +5797,17 @@ class OCRSettingsView(discord.ui.View):
                     logger.info("[Test Button] Successfully decoded base64 image.")
                 except Exception as decode_err:
                     logger.error(f"[Test Button] Failed to decode base64 image: {decode_err}")
-                    await interaction.followup.send(f"{theme.deniedIcon} Failed to decode captcha image data.", ephemeral=True)
+                    await interaction.followup.send(
+                        f"{theme.deniedIcon} {t('gift.ocr.test_decode_error', self.lang)}",
+                        ephemeral=True
+                    )
                     return
             else:
                 logger.error("[Test Button] Captcha fetch returned no image data.")
-                await interaction.followup.send(f"{theme.deniedIcon} Failed to retrieve captcha image data from API.", ephemeral=True)
+                await interaction.followup.send(
+                    f"{theme.deniedIcon} {t('gift.ocr.test_no_image', self.lang)}",
+                    ephemeral=True
+                )
                 return
 
             if image_bytes:
@@ -5585,18 +5821,26 @@ class OCRSettingsView(discord.ui.View):
                 logger.info(f"[Test Button] Solve result: Success={success}, Code='{captcha_code}', Method='{method}', Conf={log_confidence_str}. Duration: {solve_duration:.2f}s")
             else:
                  logger.error("[Test Button] Logic error: image_bytes is None before solving.")
-                 await interaction.followup.send(f"{theme.deniedIcon} Internal error before solving captcha.", ephemeral=True)
+                 await interaction.followup.send(
+                     f"{theme.deniedIcon} {t('gift.ocr.test_internal_error', self.lang)}",
+                     ephemeral=True
+                 )
                  return
 
             confidence_str = f'{confidence:.2f}' if isinstance(confidence, float) else 'N/A'
+            ocr_success_text = (
+                f"{theme.verifiedIcon} {t('gift.common.yes', self.lang)}"
+                if success
+                else f"{theme.deniedIcon} {t('gift.common.no', self.lang)}"
+            )
             embed = discord.Embed(
-                title=f"{theme.searchIcon} CAPTCHA Solver Test Results (ONNX)",
+                title=f"{theme.searchIcon} {t('gift.ocr.test_results_title', self.lang)}",
                 description=(
-                    f"**Test Summary**\n{theme.upperDivider}\n"
-                    f"{theme.robotIcon} **OCR Success:** {f'{theme.verifiedIcon} Yes' if success else f'{theme.deniedIcon} No'}\n"
-                    f"{theme.searchIcon} **Recognized Code:** `{captcha_code if success and captcha_code else 'N/A'}`\n"
-                    f"{theme.chartIcon} **Confidence:** `{confidence_str}`\n"
-                    f"{theme.timeIcon} **Solve Time:** `{solve_duration:.2f}s`\n"
+                    f"**{t('gift.ocr.test_summary', self.lang)}**\n{theme.upperDivider}\n"
+                    f"{theme.robotIcon} **{t('gift.ocr.test_ocr_success', self.lang)}** {ocr_success_text}\n"
+                    f"{theme.searchIcon} **{t('gift.ocr.test_code', self.lang)}** `{captcha_code if success and captcha_code else t('gift.common.na', self.lang)}`\n"
+                    f"{theme.chartIcon} **{t('gift.ocr.test_confidence', self.lang)}** `{confidence_str}`\n"
+                    f"{theme.timeIcon} **{t('gift.ocr.test_solve_time', self.lang)}** `{solve_duration:.2f}s`\n"
                     f"{theme.lowerDivider}\n"
                 ), color=theme.emColor3 if success else discord.Color.red()
             )
@@ -5638,7 +5882,11 @@ class OCRSettingsView(discord.ui.View):
                         counter += 1
 
                     if counter > 100:
-                        save_error_str = f"Could not find unique filename for {base_filename} after 100 tries."
+                        save_error_str = t(
+                            "gift.ocr.test_save_name_error",
+                            self.lang,
+                            filename=base_filename
+                        )
                         logger.warning(f"[Test Button] {save_error_str}")
                     else:
                         os.makedirs(captcha_dir, exist_ok=True)
@@ -5649,12 +5897,25 @@ class OCRSettingsView(discord.ui.View):
 
             except Exception as img_save_err:
                 logger.exception(f"[Test Button] Error saving test image: {img_save_err}")
-                save_error_str = f"Error during saving: {img_save_err}"
+                save_error_str = t("gift.ocr.test_save_error", self.lang, error=img_save_err)
 
             if save_path_str:
-                embed.add_field(name="📸 Captcha Image Saved", value=f"`{save_path_str}` in `{os.path.relpath(self.cog.captcha_solver.captcha_dir)}`", inline=False)
+                embed.add_field(
+                    name=f"{theme.saveIcon} {t('gift.ocr.test_image_saved_title', self.lang)}",
+                    value=t(
+                        "gift.ocr.test_image_saved_body",
+                        self.lang,
+                        filename=save_path_str,
+                        directory=os.path.relpath(self.cog.captcha_solver.captcha_dir)
+                    ),
+                    inline=False
+                )
             elif save_error_str:
-                embed.add_field(name=f"{theme.warnIcon} Image Save Error", value=save_error_str, inline=False)
+                embed.add_field(
+                    name=f"{theme.warnIcon} {t('gift.ocr.test_image_save_error_title', self.lang)}",
+                    value=save_error_str,
+                    inline=False
+                )
 
             await interaction.followup.send(embed=embed, ephemeral=True)
             logger.info(f"[Test Button] Test completed for user {user_id}.")
@@ -5662,44 +5923,54 @@ class OCRSettingsView(discord.ui.View):
         except requests.exceptions.ConnectionError:
             logger.warning(f"[Test Button] Connection error for user {user_id}. WOS API may be unavailable.")
             try:
-                await interaction.followup.send(f"{theme.deniedIcon} Connection error: Unable to reach WOS API. Please check your internet connection.", ephemeral=True)
+                await interaction.followup.send(
+                    f"{theme.deniedIcon} {t('gift.ocr.test_connection_error', self.lang)}",
+                    ephemeral=True
+                )
             except Exception:
                 pass
         except requests.exceptions.Timeout:
             logger.warning(f"[Test Button] Timeout for user {user_id}. WOS API may be slow.")
             try:
-                await interaction.followup.send(f"{theme.deniedIcon} Connection error: Request timed out. WOS API may be overloaded or unavailable.", ephemeral=True)
+                await interaction.followup.send(
+                    f"{theme.deniedIcon} {t('gift.ocr.test_timeout', self.lang)}",
+                    ephemeral=True
+                )
             except Exception:
                 pass
         except requests.exceptions.RequestException as e:
             logger.warning(f"[Test Button] Request error for user {user_id}: {type(e).__name__}")
             try:
-                await interaction.followup.send(f"{theme.deniedIcon} Connection error: {type(e).__name__}. Please try again later.", ephemeral=True)
+                await interaction.followup.send(
+                    f"{theme.deniedIcon} {t('gift.ocr.test_request_error', self.lang, error=type(e).__name__)}",
+                    ephemeral=True
+                )
             except Exception:
                 pass
         except Exception as e:
             logger.exception(f"[Test Button] UNEXPECTED Error during test for user {user_id}: {e}")
             try:
-                await interaction.followup.send(f"{theme.deniedIcon} An unexpected error occurred during the test: `{e}`. Please check the bot logs.", ephemeral=True)
+                await interaction.followup.send(
+                    f"{theme.deniedIcon} {t('gift.ocr.test_unexpected_error', self.lang, error=e)}",
+                    ephemeral=True
+                )
             except Exception as followup_err:
                 logger.error(f"[Test Button] Failed to send final error followup to user {user_id}: {followup_err}")
 
     async def clear_redemption_cache_button(self, interaction: discord.Interaction):
         """Handle the clear redemption cache button click."""
         if not self.onnx_available:
-            await interaction.response.send_message(f"{theme.deniedIcon} Required library (onnxruntime) is not installed or failed to load.", ephemeral=True)
+            await interaction.response.send_message(
+                f"{theme.deniedIcon} {t('gift.ocr.error.onnx_missing', self.lang)}",
+                ephemeral=True
+            )
             return
 
         # Create confirmation embed
         embed = discord.Embed(
-            title=f"{theme.warnIcon} Clear Redemption Cache",
+            title=f"{theme.warnIcon} {t('gift.ocr.cache_clear_title', self.lang)}",
             description=(
-                "This will **permanently delete** all gift code redemption records from the database.\n\n"
-                "**What this does:**\n"
-                "• Removes all entries from the `user_giftcodes` table\n"
-                "• Allows users to attempt redeeming gift codes again\n"
-                "• Useful for development testing and image collection\n\n"
-                "**Warning:** This action cannot be undone!"
+                f"{t('gift.ocr.cache_clear_desc', self.lang)}"
             ),
             color=discord.Color.orange()
         )
@@ -5709,25 +5980,28 @@ class OCRSettingsView(discord.ui.View):
             self.cog.cursor.execute("SELECT COUNT(*) FROM user_giftcodes")
             current_count = self.cog.cursor.fetchone()[0]
             embed.add_field(
-                name=f"{theme.chartIcon} Current Records",
-                value=f"{current_count:,} redemption records will be deleted",
+                name=f"{theme.chartIcon} {t('gift.ocr.cache_current_records', self.lang)}",
+                value=t("gift.ocr.cache_current_records_value", self.lang, count=f"{current_count:,}"),
                 inline=False
             )
         except Exception as e:
             self.cog.logger.error(f"Error getting user_giftcodes count: {e}")
             embed.add_field(
-                name=f"{theme.chartIcon} Current Records", 
-                value="Unable to count records",
+                name=f"{theme.chartIcon} {t('gift.ocr.cache_current_records', self.lang)}",
+                value=t("gift.ocr.cache_current_records_error", self.lang),
                 inline=False
             )
 
         # Create confirmation view
-        confirm_view = ClearCacheConfirmView(self.cog)
+        confirm_view = ClearCacheConfirmView(self.cog, self.lang)
         await interaction.response.send_message(embed=embed, view=confirm_view, ephemeral=True)
 
     async def image_save_select_callback(self, interaction: discord.Interaction):
         if not self.onnx_available:
-            await interaction.response.send_message(f"{theme.deniedIcon} Required library (onnxruntime) is not installed or failed to load.", ephemeral=True)
+            await interaction.response.send_message(
+                f"{theme.deniedIcon} {t('gift.ocr.error.onnx_missing', self.lang)}",
+                ephemeral=True
+            )
             return
 
         await interaction.response.defer(ephemeral=True) 
@@ -5737,7 +6011,8 @@ class OCRSettingsView(discord.ui.View):
         
             success, message = await self.cog.update_ocr_settings(
                 interaction=interaction,
-                save_images=selected_value
+                save_images=selected_value,
+                lang=self.lang
             )
 
             if success:
@@ -5748,22 +6023,29 @@ class OCRSettingsView(discord.ui.View):
                 await interaction.followup.send(f"{theme.deniedIcon} {message}", ephemeral=True)
 
         except ValueError:
-            await interaction.followup.send(f"{theme.deniedIcon} Invalid selection value for image saving.", ephemeral=True)
+                await interaction.followup.send(
+                    f"{theme.deniedIcon} {t('gift.ocr.select_invalid', self.lang)}",
+                    ephemeral=True
+                )
         except Exception as e:
             self.cog.logger.exception("Error processing image save selection in OCRSettingsView.")
-            await interaction.followup.send(f"{theme.deniedIcon} An error occurred while updating image saving settings.", ephemeral=True)
+                await interaction.followup.send(
+                    f"{theme.deniedIcon} {t('gift.ocr.select_update_error', self.lang)}",
+                    ephemeral=True
+                )
         
         async def update_task(save_images_value):
             self.cog.logger.info(f"Task started: Updating OCR save_images to {save_images_value}")
             _success, _message = await self.cog.update_ocr_settings(
                 interaction=None,
-                save_images=save_images_value
+                save_images=save_images_value,
+                lang=self.lang
             )
             self.cog.logger.info(f"Task finished: update_ocr_settings returned success={_success}, message='{_message}'")
             return _success, _message
 
         update_job = asyncio.create_task(update_task(selected_value))
-        initial_followup_message = f"{theme.hourglassIcon} Your settings are being updated... Please wait."
+        initial_followup_message = f"{theme.hourglassIcon} {t('gift.ocr.update_in_progress', self.lang)}"
         try:
             progress_message = await interaction.followup.send(initial_followup_message, ephemeral=True)
         except discord.HTTPException as e:
@@ -5774,11 +6056,13 @@ class OCRSettingsView(discord.ui.View):
             success, message_from_task = await asyncio.wait_for(update_job, timeout=60.0)
         except asyncio.TimeoutError:
             self.cog.logger.error("Timeout waiting for OCR settings update task to complete.")
-            await progress_message.edit(content="⌛️ Timed out waiting for settings to update. Please try again or check logs.")
+            await progress_message.edit(content=f"{t('gift.ocr.update_timeout', self.lang)}")
             return
         except Exception as e_task:
             self.cog.logger.exception(f"Exception in OCR settings update task: {e_task}")
-            await progress_message.edit(content=f"{theme.deniedIcon} An error occurred during the update: {e_task}")
+            await progress_message.edit(
+                content=f"{theme.deniedIcon} {t('gift.ocr.update_error', self.lang, error=e_task)}"
+            )
             return
 
         if success:
@@ -5803,7 +6087,9 @@ class OCRSettingsView(discord.ui.View):
                  self.cog.logger.warning("Original message or progress message for OCR settings not found for final update.")
             except Exception as e_edit_final:
                  self.cog.logger.exception(f"Error editing messages after successful OCR settings update: {e_edit_final}")
-                 await progress_message.edit(content=f"{theme.verifiedIcon} {message_from_task}\n{theme.warnIcon} Couldn't fully refresh the view.")
+                 await progress_message.edit(
+                     content=f"{theme.verifiedIcon} {message_from_task}\n{theme.warnIcon} {t('gift.ocr.update_refresh_warn', self.lang)}"
+                 )
 
         else:
             self.cog.logger.error(f"OCR settings update failed: {message_from_task}")

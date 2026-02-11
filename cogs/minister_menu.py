@@ -7,17 +7,24 @@ import aiohttp
 from aiohttp_socks import ProxyConnector
 from .permission_handler import PermissionManager
 from .pimp_my_bot import theme
+from i18n import get_guild_language, t
 
 SECRET = 'tB87#kPtkxqOS2'
 
+
+def _get_lang(interaction: discord.Interaction | None) -> str:
+    guild_id = interaction.guild.id if interaction and interaction.guild else None
+    return get_guild_language(guild_id)
+
 class UserFilterModal(discord.ui.Modal, title="Filter Users"):
-    def __init__(self, parent_view):
-        super().__init__()
+    def __init__(self, parent_view, lang: str):
+        super().__init__(title=t("minister.menu.filter_title", lang))
         self.parent_view = parent_view
+        self.lang = lang
         
         self.filter_input = discord.ui.TextInput(
-            label="Filter by ID or Name",
-            placeholder="Enter ID or nickname (partial match supported)",
+            label=t("minister.menu.filter_label", lang),
+            placeholder=t("minister.menu.filter_placeholder", lang),
             required=False,
             max_length=100,
             default=self.parent_view.filter_text
@@ -33,7 +40,7 @@ class UserFilterModal(discord.ui.Modal, title="Filter Users"):
         await self.parent_view.update_embed(interaction)
 
 class FilteredUserSelectView(discord.ui.View):
-    def __init__(self, bot, cog, activity_name, users, booked_times, page=0):
+    def __init__(self, bot, cog, activity_name, users, booked_times, page=0, lang: str = "en"):
         super().__init__(timeout=7200)
         self.bot = bot
         self.cog = cog
@@ -41,6 +48,7 @@ class FilteredUserSelectView(discord.ui.View):
         self.users = users  # List of (fid, nickname, alliance_id) tuples
         self.booked_times = booked_times  # Dict of time: (fid, alliance) for this activity
         self.page = page
+        self.lang = lang
         self.filter_text = ""
         self.filtered_users = self.users.copy()
         self.max_page = (len(self.filtered_users) - 1) // 25 if self.filtered_users else 0
@@ -99,10 +107,14 @@ class FilteredUserSelectView(discord.ui.View):
         
         if not current_users:
             # No users to display
-            placeholder = "No users found" if self.filter_text else "No users available"
+            placeholder = (
+                t("minister.menu.users_none_filtered", self.lang)
+                if self.filter_text
+                else t("minister.menu.users_none", self.lang)
+            )
             select = discord.ui.Select(
                 placeholder=placeholder,
-                options=[discord.SelectOption(label="No users", value="none")],
+                options=[discord.SelectOption(label=t("minister.menu.users_none_option", self.lang), value="none")],
                 disabled=True
             )
         else:
@@ -124,7 +136,12 @@ class FilteredUserSelectView(discord.ui.View):
                 options.append(option)
             
             select = discord.ui.Select(
-                placeholder=f"Select a user... (Page {self.page + 1}/{self.max_page + 1})",
+                placeholder=t(
+                    "minister.menu.user_select_placeholder",
+                    self.lang,
+                    page=self.page + 1,
+                    max_page=self.max_page + 1
+                ),
                 options=options,
                 min_values=1,
                 max_values=1
@@ -141,7 +158,10 @@ class FilteredUserSelectView(discord.ui.View):
         # Find the selected user's data
         user_data = next((user for user in self.users if user[0] == selected_fid), None)
         if not user_data:
-            await interaction.response.send_message(f"{theme.deniedIcon} User not found.", ephemeral=True)
+            await interaction.response.send_message(
+                t("minister.menu.user_not_found", _get_lang(interaction), icon=theme.deniedIcon),
+                ephemeral=True
+            )
             return
         
         fid, nickname, alliance_id = user_data
@@ -170,7 +190,7 @@ class FilteredUserSelectView(discord.ui.View):
     
     @discord.ui.button(label="Filter", style=discord.ButtonStyle.secondary, emoji=f"{theme.searchIcon}", custom_id="filter", row=1)
     async def filter_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        modal = UserFilterModal(self)
+        modal = UserFilterModal(self, _get_lang(interaction))
         await interaction.response.send_modal(modal)
     
     @discord.ui.button(label="Clear", style=discord.ButtonStyle.danger, emoji=f"{theme.deniedIcon}", custom_id="clear_filter", row=1, disabled=True)
@@ -192,28 +212,39 @@ class FilteredUserSelectView(discord.ui.View):
     
     async def update_embed(self, interaction: discord.Interaction):
         """Update the main embed with current information"""
+        lang = _get_lang(interaction)
         # Get current stats
         total_booked = len(self.booked_fids)
         available_slots = 48 - total_booked
         
         # Create description based on filter status
-        description = f"Select a user to manage their {self.activity_name} appointment.\n\n"
+        description = t(
+            "minister.menu.manage_desc",
+            lang,
+            activity_name=self.activity_name
+        )
         
         if self.filter_text:
-            description += f"**Filter:** `{self.filter_text}`\n"
-            description += f"**Filtered Users:** {len(self.filtered_users)}/{len(self.users)}\n\n"
+            description += t(
+                "minister.menu.filter_status",
+                lang,
+                filter_text=self.filter_text,
+                filtered=len(self.filtered_users),
+                total=len(self.users)
+            )
         
-        description += (
-            f"**Current Status**\n"
-            f"{theme.upperDivider}\n"
-            f"📅 **Booked Slots:** `{total_booked}/48`\n"
-            f"{theme.timeIcon} **Available Slots:** `{available_slots}/48`\n"
-            f"{theme.lowerDivider}\n\n"
-            f"📅 = User already has a booking"
+        description += t(
+            "minister.menu.status_block",
+            lang,
+            upper=theme.upperDivider,
+            lower=theme.lowerDivider,
+            time_icon=theme.timeIcon,
+            booked=total_booked,
+            available=available_slots
         )
         
         embed = discord.Embed(
-            title=f"🧑‍💼 {self.activity_name} Management",
+            title=t("minister.menu.manage_title", lang, activity_name=self.activity_name),
             description=description,
             color=theme.emColor1
         )
@@ -235,6 +266,7 @@ class ClearConfirmationView(discord.ui.View):
     @discord.ui.button(label="Confirm", style=discord.ButtonStyle.danger, emoji=f"{theme.verifiedIcon}")
     async def confirm_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
+        lang = _get_lang(interaction)
         
         minister_schedule_cog = self.bot.get_cog("MinisterSchedule")
         
@@ -246,11 +278,15 @@ class ClearConfirmationView(discord.ui.View):
             time_list, _ = minister_schedule_cog.generate_time_list(cleared_fids)
 
             # Split into chunks if too long for embed description (4096 char limit)
-            header = f"**Previous {self.activity_name} schedule** (before clearing):"
+            header = t("minister.clear.previous_header", lang, appointment_type=self.activity_name)
             message_chunks = minister_schedule_cog.split_message_content(header, time_list, max_length=4000)
 
             for i, chunk in enumerate(message_chunks):
-                title = f"Cleared {self.activity_name}" if i == 0 else f"Cleared {self.activity_name} (continued)"
+                title = (
+                    t("minister.clear.cleared_title", lang, appointment_type=self.activity_name)
+                    if i == 0
+                    else t("minister.clear.cleared_title_continued", lang, appointment_type=self.activity_name)
+                )
                 clear_list_embed = discord.Embed(
                     title=title,
                     description=chunk,
@@ -263,7 +299,12 @@ class ClearConfirmationView(discord.ui.View):
             self.cog.svs_conn.commit()
             
             cleared_count = len(cleared_fids)
-            message = f"Cleared all {cleared_count} appointments for {self.activity_name}"
+            message = t(
+                "minister.menu.clear_all_message",
+                lang,
+                count=cleared_count,
+                activity_name=self.activity_name
+            )
         else:
             # Get appointments for allowed alliances
             placeholders = ','.join('?' for _ in self.alliance_ids)
@@ -277,38 +318,44 @@ class ClearConfirmationView(discord.ui.View):
             self.cog.svs_conn.commit()
             
             cleared_count = len(cleared_fids)
-            message = f"Cleared {cleared_count} alliance appointments for {self.activity_name}"
+            message = t(
+                "minister.menu.clear_alliance_message",
+                lang,
+                count=cleared_count,
+                activity_name=self.activity_name
+            )
         
         # Send log
         if minister_schedule_cog and cleared_count > 0:
             embed = discord.Embed(
-                title=f"Appointments Cleared - {self.activity_name}",
-                description=f"{cleared_count} appointments were cleared",
+                title=t("minister.menu.cleared_title", lang, activity_name=self.activity_name),
+                description=t("minister.menu.cleared_desc", lang, count=cleared_count),
                 color=theme.emColor2
             )
-            embed.set_author(name=f"Cleared by {interaction.user.display_name}", icon_url=interaction.user.avatar.url if interaction.user.avatar else None)
+            embed.set_author(
+                name=t("minister.clear.success_author", lang, user=interaction.user.display_name),
+                icon_url=interaction.user.avatar.url if interaction.user.avatar else None
+            )
             await minister_schedule_cog.send_embed_to_channel(embed)
             await self.cog.update_channel_message(self.activity_name)
         
         # Return to settings menu with success message
         embed = discord.Embed(
-            title=f"{theme.settingsIcon} Minister Settings",
+            title=t("minister.menu.settings_title", lang, icon=theme.settingsIcon),
             description=(
-                f"{theme.verifiedIcon} **{message}**\n\n"
-                f"Administrative settings for minister scheduling:\n\n"
-                f"Available Actions\n"
-                f"{theme.upperDivider}\n\n"
-                f"{theme.editListIcon} **Update Names**\n"
-                f"└ Update nicknames from API for booked users\n\n"
-                f"{theme.listIcon} **Schedule List Type**\n"
-                f"└ Change the type of schedule list message when adding/removing people\n\n"
-                f"{theme.calendarIcon} **Delete All Reservations**\n"
-                f"└ Clear appointments for a specific day\n\n"
-                f"{theme.announceIcon} **Clear Channels**\n"
-                f"└ Clear channel configurations\n\n"
-                f"{theme.fidIcon} **Delete Server ID**\n"
-                f"└ Remove configured server from database\n\n"
-                f"{theme.lowerDivider}"
+                t(
+                    "minister.menu.settings_desc",
+                    lang,
+                    message=message,
+                    verified=theme.verifiedIcon,
+                    upper=theme.upperDivider,
+                    lower=theme.lowerDivider,
+                    edit_icon=theme.editListIcon,
+                    list_icon=theme.listIcon,
+                    calendar_icon=theme.calendarIcon,
+                    announce_icon=theme.announceIcon,
+                    fid_icon=theme.fidIcon
+                )
             ),
             color=theme.emColor3
         )
@@ -321,11 +368,21 @@ class ClearConfirmationView(discord.ui.View):
         await self.cog.show_filtered_user_select(interaction, self.activity_name)
 
 class ActivitySelectView(discord.ui.View):
-    def __init__(self, bot, cog, action_type):
+    def __init__(self, bot, cog, action_type, lang: str = "en"):
         super().__init__(timeout=7200)
         self.bot = bot
         self.cog = cog
         self.action_type = action_type  # "update_names" or "clear_reservations"
+        self.lang = lang
+
+        self.activity_select.placeholder = t("minister.menu.activity_select_placeholder", lang)
+        for option in self.activity_select.options:
+            if option.value == "Construction Day":
+                option.label = t("minister.menu.activity.construction", lang)
+            elif option.value == "Research Day":
+                option.label = t("minister.menu.activity.research", lang)
+            elif option.value == "Troops Training Day":
+                option.label = t("minister.menu.activity.training", lang)
     
     @discord.ui.select(
         placeholder="Select an activity day...",
@@ -366,8 +423,12 @@ class MinisterSettingsView(discord.ui.View):
     @discord.ui.button(label="Update Names", style=discord.ButtonStyle.secondary, emoji=f"{theme.editListIcon}", row=1)
     async def update_names(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Check if user is admin
+        lang = _get_lang(interaction)
         if not await self.cog.is_admin(interaction.user.id):
-            await interaction.response.send_message(f"{theme.deniedIcon} You do not have permission to update names.", ephemeral=True)
+            await interaction.response.send_message(
+                t("minister.menu.no_permission_update", lang, icon=theme.deniedIcon),
+                ephemeral=True
+            )
             return
 
         await self.cog.show_activity_selection_for_update(interaction)
@@ -375,8 +436,12 @@ class MinisterSettingsView(discord.ui.View):
     @discord.ui.button(label="Schedule List Type", style=discord.ButtonStyle.secondary, emoji=f"{theme.listIcon}", row=1)
     async def list_type(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Check if user is admin
+        lang = _get_lang(interaction)
         if not await self.cog.is_admin(interaction.user.id):
-            await interaction.response.send_message(f"{theme.deniedIcon} You do not have permission to update names.", ephemeral=True)
+            await interaction.response.send_message(
+                t("minister.menu.no_permission_update", lang, icon=theme.deniedIcon),
+                ephemeral=True
+            )
             return
 
         await self.cog.show_activity_selection_for_list_type(interaction)
@@ -384,8 +449,12 @@ class MinisterSettingsView(discord.ui.View):
     @discord.ui.button(label="Time Slot Mode", style=discord.ButtonStyle.secondary, emoji=f"{theme.timeIcon}", row=1)
     async def time_slot_mode(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Check if user is admin
+        lang = _get_lang(interaction)
         if not await self.cog.is_admin(interaction.user.id):
-            await interaction.response.send_message(f"{theme.deniedIcon} You do not have permission to change time slot mode.", ephemeral=True)
+            await interaction.response.send_message(
+                t("minister.menu.no_permission_slot", lang, icon=theme.deniedIcon),
+                ephemeral=True
+            )
             return
 
         await self.cog.show_time_slot_mode_menu(interaction)
@@ -393,9 +462,13 @@ class MinisterSettingsView(discord.ui.View):
     @discord.ui.button(label="Delete All Reservations", style=discord.ButtonStyle.danger, emoji=f"{theme.calendarIcon}", row=2)
     async def clear_reservations(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Check if user is global admin
+        lang = _get_lang(interaction)
         is_admin, is_global_admin, _ = await self.cog.get_admin_permissions(interaction.user.id)
         if not is_global_admin:
-            await interaction.response.send_message(f"{theme.deniedIcon} Only global administrators can clear reservations.", ephemeral=True)
+            await interaction.response.send_message(
+                t("minister.menu.only_global_clear", lang, icon=theme.deniedIcon),
+                ephemeral=True
+            )
             return
         
         await self.cog.show_activity_selection_for_clear(interaction)
@@ -403,9 +476,13 @@ class MinisterSettingsView(discord.ui.View):
     @discord.ui.button(label="Clear Channels", style=discord.ButtonStyle.danger, emoji=f"{theme.announceIcon}", row=2)
     async def clear_channels(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Check if user is global admin
+        lang = _get_lang(interaction)
         is_admin, is_global_admin, _ = await self.cog.get_admin_permissions(interaction.user.id)
         if not is_global_admin:
-            await interaction.response.send_message(f"{theme.deniedIcon} Only global administrators can clear channel configurations.", ephemeral=True)
+            await interaction.response.send_message(
+                t("minister.menu.only_global_clear_channels", lang, icon=theme.deniedIcon),
+                ephemeral=True
+            )
             return
         
         await self.cog.show_clear_channels_selection(interaction)
@@ -413,9 +490,13 @@ class MinisterSettingsView(discord.ui.View):
     @discord.ui.button(label="Delete Server ID", style=discord.ButtonStyle.danger, emoji=f"{theme.fidIcon}", row=3)
     async def delete(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Check if user is global admin
+        lang = _get_lang(interaction)
         is_admin, is_global_admin, _ = await self.cog.get_admin_permissions(interaction.user.id)
         if not is_global_admin:
-            await interaction.response.send_message(f"{theme.deniedIcon} Only global administrators can delete server configuration.", ephemeral=True)
+            await interaction.response.send_message(
+                t("minister.menu.only_global_delete", lang, icon=theme.deniedIcon),
+                ephemeral=True
+            )
             return
         
         try:
@@ -424,9 +505,15 @@ class MinisterSettingsView(discord.ui.View):
             svs_cursor.execute("DELETE FROM reference WHERE context=?", ("minister guild id",))
             svs_conn.commit()
             svs_conn.close()
-            await interaction.response.send_message(f"{theme.verifiedIcon} Server ID deleted from the database.", ephemeral=True)
+            await interaction.response.send_message(
+                t("minister.menu.server_deleted", lang, icon=theme.verifiedIcon),
+                ephemeral=True
+            )
         except Exception as e:
-            await interaction.response.send_message(f"{theme.deniedIcon} Failed to delete server ID: {e}", ephemeral=True)
+            await interaction.response.send_message(
+                t("minister.menu.server_delete_failed", lang, icon=theme.deniedIcon, error=str(e)),
+                ephemeral=True
+            )
 
     @discord.ui.button(label="Back", style=discord.ButtonStyle.primary, emoji=f"{theme.backIcon}", row=3)
     async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -464,7 +551,10 @@ class MinisterChannelView(discord.ui.View):
     async def channel_setup(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Channel setup is server-specific, so any admin can configure it
         if not await self.cog.is_admin(interaction.user.id):
-            await interaction.response.send_message(f"{theme.deniedIcon} You do not have permission to configure channels.", ephemeral=True)
+            await interaction.response.send_message(
+                t("minister.menu.no_permission_channels", _get_lang(interaction), icon=theme.deniedIcon),
+                ephemeral=True
+            )
             return
 
         await self.cog.show_channel_setup_menu(interaction)
@@ -474,13 +564,19 @@ class MinisterChannelView(discord.ui.View):
         # Check if user is global admin
         is_admin, is_global_admin, _ = await self.cog.get_admin_permissions(interaction.user.id)
         if not is_global_admin:
-            await interaction.response.send_message(f"{theme.deniedIcon} Only global administrators can access archives.", ephemeral=True)
+            await interaction.response.send_message(
+                t("minister.menu.only_global_archives", _get_lang(interaction), icon=theme.deniedIcon),
+                ephemeral=True
+            )
             return
 
         # Get archive cog
         archive_cog = self.bot.get_cog("MinisterArchive")
         if not archive_cog:
-            await interaction.response.send_message(f"{theme.deniedIcon} Minister Archive module not found.", ephemeral=True)
+            await interaction.response.send_message(
+                t("minister.archive.module_missing", _get_lang(interaction), icon=theme.deniedIcon),
+                ephemeral=True
+            )
             return
 
         await archive_cog.show_archive_menu(interaction)
@@ -497,19 +593,23 @@ class MinisterChannelView(discord.ui.View):
                 await other_features_cog.show_other_features_menu(interaction)
             else:
                 await interaction.response.send_message(
-                    f"{theme.deniedIcon} Other Features module not found.",
+                    t("minister.menu.other_features_missing", _get_lang(interaction), icon=theme.deniedIcon),
                     ephemeral=True
                 )
         except Exception as e:
             await interaction.response.send_message(
-                f"{theme.deniedIcon} An error occurred while returning to Other Features menu: {e}",
+                t("minister.menu.other_features_error", _get_lang(interaction), icon=theme.deniedIcon, error=str(e)),
                 ephemeral=True
             )
 
     async def _handle_activity_selection(self, interaction: discord.Interaction, activity_name: str):
+        lang = _get_lang(interaction)
         minister_schedule_cog = self.cog.bot.get_cog("MinisterSchedule")
         if not minister_schedule_cog:
-            await interaction.response.send_message(f"{theme.deniedIcon} Minister Schedule module not found.", ephemeral=True)
+            await interaction.response.send_message(
+                t("minister.menu.schedule_missing", lang, icon=theme.deniedIcon),
+                ephemeral=True
+            )
             return
 
         channel_context = f"{activity_name} channel"
@@ -524,14 +624,14 @@ class MinisterChannelView(discord.ui.View):
 
         if not log_guild:
             await interaction.response.send_message(
-                "Could not find the minister log server. Make sure the bot is in that server.\n\nIf issue persists, run the `/settings` command --> Other Features --> Minister Scheduling --> Delete Server ID and try again in the desired server",
+                t("minister.menu.log_server_missing", lang),
                 ephemeral=True
             )
             return
 
         if not channel or not log_channel:
             await interaction.response.send_message(
-                f"Could not find {activity_name} channel or log channel. Make sure to select a channel for each minister type for the bot to send the updated list, and a log channel.\n\nYou can do so by running the `/settings` command --> Other Features --> Minister Scheduling --> Channel Setup",
+                t("minister.menu.channel_missing", lang, activity_name=activity_name),
                 ephemeral=True
             )
             return
@@ -539,8 +639,7 @@ class MinisterChannelView(discord.ui.View):
 
         if interaction.guild.id != log_guild.id:
             await interaction.response.send_message(
-                f"This menu must be used in the configured server: `{log_guild}`.\n\n"
-                "If you want to change the server, run `/settings` command --> Other Features --> Minister Scheduling --> Delete Server ID and try again in the desired server",
+                t("minister.menu.server_mismatch", lang, guild=log_guild),
                 ephemeral=True
             )
             return
@@ -575,9 +674,13 @@ class ChannelConfigurationView(discord.ui.View):
         await self.cog.show_minister_channel_menu(interaction)
 
     async def _handle_channel_selection(self, interaction: discord.Interaction, channel_context: str, activity_name: str):
+        lang = _get_lang(interaction)
         minister_schedule_cog = self.cog.bot.get_cog("MinisterSchedule")
         if not minister_schedule_cog:
-            await interaction.response.send_message(f"{theme.deniedIcon} Minister Schedule module not found.", ephemeral=True)
+            await interaction.response.send_message(
+                t("minister.menu.schedule_missing", lang, icon=theme.deniedIcon),
+                ephemeral=True
+            )
             return
 
         import sys
@@ -586,32 +689,28 @@ class ChannelConfigurationView(discord.ui.View):
         
         # Create a custom view with a back button
         class ChannelSelectWithBackView(discord.ui.View):
-            def __init__(self, bot, context, cog):
+            def __init__(self, bot, context, cog, lang: str):
                 super().__init__(timeout=None)
                 self.bot = bot
                 self.context = context
                 self.cog = cog
-                self.add_item(ChannelSelect(bot, context))
+                self.lang = lang
+                self.add_item(ChannelSelect(bot, context, lang))
                 
             @discord.ui.button(label="Back", style=discord.ButtonStyle.primary, emoji=f"{theme.backIcon}", row=1)
             async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
                 # Restore the menu with embed
                 embed = discord.Embed(
-                    title=f"{theme.listIcon} Channel Setup",
-                    description=(
-                        f"Configure channels for minister scheduling:\n\n"
-                        f"Channel Types\n"
-                        f"{theme.upperDivider}\n\n"
-                        f"{theme.constructionIcon} **Construction Channel**\n"
-                        f"└ Shows available Construction Day slots\n\n"
-                        f"{theme.researchIcon} **Research Channel**\n"
-                        f"└ Shows available Research Day slots\n\n"
-                        f"{theme.trainingIcon} **Training Channel**\n"
-                        f"└ Shows available Training Day slots\n\n"
-                        f"{theme.listIcon} **Log Channel**\n"
-                        f"└ Receives add/remove notifications\n\n"
-                        f"{theme.lowerDivider}\n\n"
-                        f"Select a channel type to configure:"
+                    title=t("minister.menu.channel_setup_title", self.lang, icon=theme.listIcon),
+                    description=t(
+                        "minister.menu.channel_setup_desc",
+                        self.lang,
+                        upper=theme.upperDivider,
+                        lower=theme.lowerDivider,
+                        construction=theme.constructionIcon,
+                        research=theme.researchIcon,
+                        training=theme.trainingIcon,
+                        list_icon=theme.listIcon
                     ),
                     color=theme.emColor1
                 )
@@ -629,13 +728,13 @@ class ChannelConfigurationView(discord.ui.View):
                 )
 
         await interaction.response.edit_message(
-            content=f"Select a channel for {activity_name}:",
-            view=ChannelSelectWithBackView(self.bot, channel_context, self.cog),
+            content=t("minister.menu.channel_select", lang, activity_name=activity_name),
+            view=ChannelSelectWithBackView(self.bot, channel_context, self.cog, lang),
             embed=None
         )
 
 class TimeSelectView(discord.ui.View):
-    def __init__(self, bot, cog, activity_name, fid, available_times, current_time=None, page=0):
+    def __init__(self, bot, cog, activity_name, fid, available_times, current_time=None, page=0, lang: str = "en"):
         super().__init__(timeout=7200)
         self.bot = bot
         self.cog = cog
@@ -644,6 +743,7 @@ class TimeSelectView(discord.ui.View):
         self.available_times = available_times
         self.current_time = current_time
         self.page = page
+        self.lang = lang
         self.max_page = (len(available_times) - 1) // 25 if available_times else 0
 
         self.update_components()
@@ -658,7 +758,7 @@ class TimeSelectView(discord.ui.View):
         page_times = self.available_times[start_idx:end_idx]
 
         # Add time select dropdown
-        self.add_item(TimeSelect(page_times, self.page, self.max_page))
+        self.add_item(TimeSelect(page_times, self.page, self.max_page, self.lang))
 
         # Add pagination buttons if needed
         if self.max_page > 0:
@@ -728,7 +828,7 @@ class TimeSelectView(discord.ui.View):
             item.disabled = True
 
 class TimeSelect(discord.ui.Select):
-    def __init__(self, available_times, page=0, max_page=0):
+    def __init__(self, available_times, page=0, max_page=0, lang: str = "en"):
         options = []
         for time_slot in available_times:  # Already sliced in TimeSelectView
             options.append(discord.SelectOption(
@@ -736,9 +836,14 @@ class TimeSelect(discord.ui.Select):
                 value=time_slot
             ))
 
-        placeholder = "Select an available time slot..."
+        placeholder = t("minister.menu.time_select_placeholder", lang)
         if max_page > 0:
-            placeholder = f"Select time... (Page {page + 1}/{max_page + 1})"
+            placeholder = t(
+                "minister.menu.time_select_paged",
+                lang,
+                page=page + 1,
+                max_page=max_page + 1
+            )
 
         super().__init__(
             placeholder=placeholder,
@@ -799,34 +904,27 @@ class MinisterMenu(commands.Cog):
     async def show_minister_channel_menu(self, interaction: discord.Interaction):
         # Store the original interaction for later updates
         self.original_interaction = interaction
+        lang = _get_lang(interaction)
 
         # Get channel status and permissions
-        channel_status, embed_color = await self.get_channel_status_display()
+        channel_status, embed_color = await self.get_channel_status_display(lang)
         _, is_global, _ = await self.get_admin_permissions(interaction.user.id)
 
         embed = discord.Embed(
-            title="🏛️ Minister Scheduling",
-            description=(
-                f"Manage your minister appointments here:\n\n"
-                f"**Channel Status**\n"
-                f"{theme.upperDivider}\n"
-                f"{channel_status}\n"
-                f"{theme.middleDivider}\n\n"
-                f"**Available Operations**\n"
-                f"{theme.middleDivider}\n"
-                f"{theme.constructionIcon} **Construction Day**\n"
-                f"└ Manage Construction Day appointments\n\n"
-                f"{theme.researchIcon} **Research Day**\n"
-                f"└ Manage Research Day appointments\n\n"
-                f"{theme.trainingIcon} **Training Day**\n"
-                f"└ Manage Troops Training Day appointments\n\n"
-                f"{theme.editListIcon} **Channel Setup**\n"
-                f"└ Configure channels for appointments and logging\n\n"
-                f"{theme.archiveIcon} **Event Archive**\n"
-                f"└ Save and view past SvS minister schedules\n\n"
-                f"{theme.settingsIcon} **Settings**\n"
-                f"└ Update names, clear reservations and more\n"
-                f"{theme.lowerDivider}"
+            title=t("minister.menu.main_title", lang),
+            description=t(
+                "minister.menu.main_desc",
+                lang,
+                channel_status=channel_status,
+                upper=theme.upperDivider,
+                middle=theme.middleDivider,
+                lower=theme.lowerDivider,
+                construction=theme.constructionIcon,
+                research=theme.researchIcon,
+                training=theme.trainingIcon,
+                edit_icon=theme.editListIcon,
+                archive_icon=theme.archiveIcon,
+                settings_icon=theme.settingsIcon
             ),
             color=embed_color
         )
@@ -839,22 +937,18 @@ class MinisterMenu(commands.Cog):
             pass
 
     async def show_channel_setup_menu(self, interaction: discord.Interaction):
+        lang = _get_lang(interaction)
         embed = discord.Embed(
-            title=f"{theme.listIcon} Channel Setup",
-            description=(
-                f"Configure channels for minister scheduling:\n\n"
-                f"Channel Types\n"
-                f"{theme.upperDivider}\n\n"
-                f"{theme.constructionIcon} **Construction Channel**\n"
-                f"└ Shows available Construction Day slots\n\n"
-                f"{theme.researchIcon} **Research Channel**\n"
-                f"└ Shows available Research Day slots\n\n"
-                f"{theme.trainingIcon} **Training Channel**\n"
-                f"└ Shows available Training Day slots\n\n"
-                f"{theme.listIcon} **Log Channel**\n"
-                f"└ Receives all change notifications\n\n"
-                f"{theme.lowerDivider}\n\n"
-                f"Select a channel type to configure:"
+            title=t("minister.menu.channel_setup_title", lang, icon=theme.listIcon),
+            description=t(
+                "minister.menu.channel_setup_desc",
+                lang,
+                upper=theme.upperDivider,
+                lower=theme.lowerDivider,
+                construction=theme.constructionIcon,
+                research=theme.researchIcon,
+                training=theme.trainingIcon,
+                list_icon=theme.listIcon
             ),
             color=theme.emColor1
         )
@@ -866,14 +960,17 @@ class MinisterMenu(commands.Cog):
         except discord.InteractionResponded:
             await interaction.edit_original_response(embed=embed, view=view)
     
-    async def get_channel_status_display(self) -> tuple[str, discord.Color]:
+    async def get_channel_status_display(self, lang: str = "en") -> tuple[str, discord.Color]:
         """
         Generate channel status display for main menu.
         Returns (status_text, embed_color)
         """
         minister_schedule_cog = self.bot.get_cog("MinisterSchedule")
         if not minister_schedule_cog:
-            return f"{theme.warnIcon} **Minister Schedule module not loaded**\n", discord.Color.red()
+            return (
+                t("minister.menu.schedule_not_loaded", lang, icon=theme.warnIcon),
+                discord.Color.red()
+            )
 
         # Get the log guild to check channels
         try:
@@ -897,7 +994,9 @@ class MinisterMenu(commands.Cog):
             channel_id = await minister_schedule_cog.get_channel_id(context)
 
             if not channel_id:
-                status_lines.append(f"{label}: {theme.warnIcon} Not Configured")
+                status_lines.append(
+                    t("minister.menu.channel_status_missing", lang, label=label, icon=theme.warnIcon)
+                )
             else:
                 # Try to get the channel
                 channel = None
@@ -905,10 +1004,20 @@ class MinisterMenu(commands.Cog):
                     channel = log_guild.get_channel(channel_id)
 
                 if channel:
-                    status_lines.append(f"{label}: {theme.verifiedIcon} {channel.mention}")
+                    status_lines.append(
+                        t(
+                            "minister.menu.channel_status_ok",
+                            lang,
+                            label=label,
+                            icon=theme.verifiedIcon,
+                            mention=channel.mention
+                        )
+                    )
                     configured_count += 1
                 else:
-                    status_lines.append(f"{label}: {theme.deniedIcon} Invalid Channel")
+                    status_lines.append(
+                        t("minister.menu.channel_status_invalid", lang, label=label, icon=theme.deniedIcon)
+                    )
                     invalid_count += 1
 
         # Determine embed color based on status
@@ -940,10 +1049,14 @@ class MinisterMenu(commands.Cog):
     async def show_filtered_user_select(self, interaction: discord.Interaction, activity_name: str):
         """Show the filtered user selection view"""
         # Check admin permissions
+        lang = _get_lang(interaction)
         is_admin, is_global_admin, alliance_ids = await self.get_admin_permissions(interaction.user.id)
 
         if not is_admin:
-            await interaction.response.send_message(f"{theme.deniedIcon} You do not have permission to manage minister appointments.", ephemeral=True)
+            await interaction.response.send_message(
+                t("minister.menu.no_permission_manage", lang, icon=theme.deniedIcon),
+                ephemeral=True
+            )
             return
 
         # Get users based on permissions
@@ -951,7 +1064,10 @@ class MinisterMenu(commands.Cog):
         users = PermissionManager.get_admin_users(interaction.user.id, guild_id)
         
         if not users:
-            await interaction.response.send_message(f"{theme.deniedIcon} No users found in your allowed alliances.", ephemeral=True)
+            await interaction.response.send_message(
+                t("minister.menu.no_users_alliance", lang, icon=theme.deniedIcon),
+                ephemeral=True
+            )
             return
         
         # Get current bookings for this activity
@@ -959,7 +1075,7 @@ class MinisterMenu(commands.Cog):
         booked_times = {row[0]: (row[1], row[2]) for row in self.svs_cursor.fetchall()}
         
         # Create the view
-        view = FilteredUserSelectView(self.bot, self, activity_name, users, booked_times)
+        view = FilteredUserSelectView(self.bot, self, activity_name, users, booked_times, lang=lang)
         
         # Initial embed
         await view.update_embed(interaction)
@@ -967,6 +1083,7 @@ class MinisterMenu(commands.Cog):
     async def show_current_schedule_list(self, interaction: discord.Interaction, activity_name: str):
         """Show a paginated list of current bookings"""
         await interaction.response.defer()
+        lang = _get_lang(interaction)
         
         # Get bookings
         self.svs_cursor.execute("SELECT time, fid, alliance FROM appointments WHERE appointment_type=? ORDER BY time", (activity_name,))
@@ -974,8 +1091,8 @@ class MinisterMenu(commands.Cog):
         
         if not bookings:
             embed = discord.Embed(
-                title=f"{theme.listIcon} {activity_name} Schedule",
-                description="No appointments currently booked.",
+                title=t("minister.menu.schedule_title", lang, icon=theme.listIcon, activity_name=activity_name),
+                description=t("minister.menu.schedule_empty", lang),
                 color=theme.emColor1
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
@@ -998,22 +1115,26 @@ class MinisterMenu(commands.Cog):
         
         # Create embed with all bookings
         embed = discord.Embed(
-            title=f"{theme.listIcon} {activity_name} Schedule",
+            title=t("minister.menu.schedule_title", lang, icon=theme.listIcon, activity_name=activity_name),
             description="\n".join(booking_lines),
             color=theme.emColor1
         )
-        embed.set_footer(text=f"Total bookings: {len(bookings)}/48")
+        embed.set_footer(text=t("minister.menu.schedule_footer", lang, count=len(bookings)))
         
         await interaction.followup.send(embed=embed, ephemeral=True)
     
     async def show_filtered_user_select_with_message(self, interaction: discord.Interaction, activity_name: str, message: str, is_error: bool = False):
         """Show the filtered user selection view with a status message"""
+        lang = _get_lang(interaction)
         # Get users based on permissions
         guild_id = interaction.guild.id if interaction.guild else None
         users = PermissionManager.get_admin_users(interaction.user.id, guild_id)
         
         if not users:
-            await interaction.response.send_message(f"{theme.deniedIcon} No users found in your allowed alliances.", ephemeral=True)
+            await interaction.response.send_message(
+                t("minister.menu.no_users_alliance", lang, icon=theme.deniedIcon),
+                ephemeral=True
+            )
             return
         
         # Get current bookings for this activity
@@ -1021,7 +1142,7 @@ class MinisterMenu(commands.Cog):
         booked_times = {row[0]: (row[1], row[2]) for row in self.svs_cursor.fetchall()}
         
         # Create the view
-        view = FilteredUserSelectView(self.bot, self, activity_name, users, booked_times)
+        view = FilteredUserSelectView(self.bot, self, activity_name, users, booked_times, lang=lang)
         
         # Get current stats
         total_booked = len({fid for time, (fid, alliance) in booked_times.items() if fid})
@@ -1029,24 +1150,30 @@ class MinisterMenu(commands.Cog):
         
         # Create description with message
         status_emoji = f"{theme.deniedIcon}" if is_error else f"{theme.verifiedIcon}"
-        description = f"{status_emoji} **{message}**\n\n"
-        description += f"Select a user to manage their {activity_name} appointment.\n\n"
+        description = t("minister.menu.status_message", lang, status_emoji=status_emoji, message=message)
+        description += t("minister.menu.manage_desc", lang, activity_name=activity_name)
         
         if view.filter_text:
-            description += f"**Filter:** `{view.filter_text}`\n"
-            description += f"**Filtered Users:** {len(view.filtered_users)}/{len(view.users)}\n\n"
+            description += t(
+                "minister.menu.filter_status",
+                lang,
+                filter_text=view.filter_text,
+                filtered=len(view.filtered_users),
+                total=len(view.users)
+            )
         
-        description += (
-            f"**Current Status**\n"
-            f"{theme.upperDivider}\n"
-            f"📅 **Booked Slots:** `{total_booked}/48`\n"
-            f"{theme.timeIcon} **Available Slots:** `{available_slots}/48`\n"
-            f"{theme.lowerDivider}\n\n"
-            f"📅 = User already has a booking"
+        description += t(
+            "minister.menu.status_block",
+            lang,
+            upper=theme.upperDivider,
+            lower=theme.lowerDivider,
+            time_icon=theme.timeIcon,
+            booked=total_booked,
+            available=available_slots
         )
         
         embed = discord.Embed(
-            title=f"🧑‍💼 {activity_name} Management",
+            title=t("minister.menu.manage_title", lang, activity_name=activity_name),
             description=description,
             color=theme.emColor2 if is_error else discord.Color.green()
         )
@@ -1059,13 +1186,17 @@ class MinisterMenu(commands.Cog):
     async def update_minister_names(self, interaction: discord.Interaction, activity_name: str):
         """Update nicknames from API for all booked users"""
         await interaction.response.defer()
+        lang = _get_lang(interaction)
         
         # Get all bookings for this activity
         self.svs_cursor.execute("SELECT DISTINCT fid FROM appointments WHERE appointment_type=?", (activity_name,))
         fids = [row[0] for row in self.svs_cursor.fetchall()]
         
         if not fids:
-            await interaction.followup.send(f"{theme.deniedIcon} No appointments to update.", ephemeral=True)
+            await interaction.followup.send(
+                t("minister.menu.no_appointments", lang, icon=theme.deniedIcon),
+                ephemeral=True
+            )
             return
         
         updated_count = 0
@@ -1091,30 +1222,33 @@ class MinisterMenu(commands.Cog):
                 failed_count += 1
         
         # Show result
-        result_msg = f"Updated {updated_count} nicknames for {activity_name}"
+        result_msg = t(
+            "minister.menu.update_names_result",
+            lang,
+            updated=updated_count,
+            activity_name=activity_name
+        )
         if failed_count > 0:
-            result_msg += f" ({failed_count} failed)"
+            result_msg += t("minister.menu.update_names_failed", lang, failed=failed_count)
         
         # Return to settings menu with success message
         _, is_global, _ = await self.get_admin_permissions(interaction.user.id)
         embed = discord.Embed(
-            title=f"{theme.settingsIcon} Minister Settings",
+            title=t("minister.menu.settings_title", lang, icon=theme.settingsIcon),
             description=(
-                f"{theme.verifiedIcon} **{result_msg}**\n\n"
-                f"Administrative settings for minister scheduling:\n\n"
-                f"Available Actions\n"
-                f"{theme.upperDivider}\n\n"
-                f"{theme.editListIcon} **Update Names**\n"
-                f"└ Update nicknames from API for booked users\n\n"
-                f"{theme.listIcon} **Schedule List Type**\n"
-                f"└ Change the type of schedule list message when adding/removing people\n\n"
-                f"{theme.calendarIcon} **Delete All Reservations**\n"
-                f"└ Clear appointments for a specific day\n\n"
-                f"{theme.announceIcon} **Clear Channels**\n"
-                f"└ Clear channel configurations\n\n"
-                f"{theme.fidIcon} **Delete Server ID**\n"
-                f"└ Remove configured server from database\n\n"
-                f"{theme.lowerDivider}"
+                t(
+                    "minister.menu.settings_desc",
+                    lang,
+                    message=result_msg,
+                    verified=theme.verifiedIcon,
+                    upper=theme.upperDivider,
+                    lower=theme.lowerDivider,
+                    edit_icon=theme.editListIcon,
+                    list_icon=theme.listIcon,
+                    calendar_icon=theme.calendarIcon,
+                    announce_icon=theme.announceIcon,
+                    fid_icon=theme.fidIcon
+                )
             ),
             color=theme.emColor3
         )
@@ -1125,6 +1259,7 @@ class MinisterMenu(commands.Cog):
     async def show_clear_confirmation(self, interaction: discord.Interaction, activity_name: str):
         """Show confirmation for clearing appointments"""
         # Check permissions
+        lang = _get_lang(interaction)
         is_admin, is_global_admin, alliance_ids = await self.get_admin_permissions(interaction.user.id)
         
         if is_global_admin:
@@ -1133,14 +1268,17 @@ class MinisterMenu(commands.Cog):
             count = self.svs_cursor.fetchone()[0]
             
             embed = discord.Embed(
-                title=f"{theme.warnIcon} Clear All Appointments",
-                description=f"Are you sure you want to clear **ALL {count} appointments** for {activity_name}?\n\nThis action cannot be undone.",
+                title=t("minister.menu.clear_all_title", lang, icon=theme.warnIcon),
+                description=t("minister.menu.clear_all_desc", lang, count=count, activity_name=activity_name),
                 color=theme.emColor2
             )
         else:
             # Count appointments for allowed alliances
             if not alliance_ids:
-                await interaction.response.send_message(f"{theme.deniedIcon} You don't have permission to clear appointments.", ephemeral=True)
+                await interaction.response.send_message(
+                    t("minister.menu.no_permission_clear", lang, icon=theme.deniedIcon),
+                    ephemeral=True
+                )
                 return
             
             placeholders = ','.join('?' for _ in alliance_ids)
@@ -1149,8 +1287,8 @@ class MinisterMenu(commands.Cog):
             count = self.svs_cursor.fetchone()[0]
             
             embed = discord.Embed(
-                title=f"{theme.warnIcon} Clear Alliance Appointments",
-                description=f"Are you sure you want to clear **{count} appointments** for your alliance(s) in {activity_name}?\n\nThis action cannot be undone.",
+                title=t("minister.menu.clear_alliance_title", lang, icon=theme.warnIcon),
+                description=t("minister.menu.clear_alliance_desc", lang, count=count, activity_name=activity_name),
                 color=theme.emColor2
             )
         
@@ -1162,6 +1300,7 @@ class MinisterMenu(commands.Cog):
             await interaction.edit_original_response(embed=embed, view=view)
 
     async def show_time_selection(self, interaction: discord.Interaction, activity_name: str, fid: str, current_time: str = None):
+        lang = _get_lang(interaction)
         # Get current slot mode
         self.svs_cursor.execute("SELECT context_id FROM reference WHERE context=?", ("slot_mode",))
         row = self.svs_cursor.fetchone()
@@ -1170,7 +1309,10 @@ class MinisterMenu(commands.Cog):
         # Get MinisterSchedule cog to access get_time_slots
         minister_schedule_cog = self.bot.get_cog("MinisterSchedule")
         if not minister_schedule_cog:
-            await interaction.response.send_message(f"{theme.deniedIcon} Minister Schedule module not found.", ephemeral=True)
+            await interaction.response.send_message(
+                t("minister.menu.schedule_missing", lang, icon=theme.deniedIcon),
+                ephemeral=True
+            )
             return
 
         # Get available time slots
@@ -1183,7 +1325,7 @@ class MinisterMenu(commands.Cog):
 
         if not available_times:
             await interaction.response.send_message(
-                f"{theme.deniedIcon} No available time slots for {activity_name}.",
+                t("minister.menu.no_time_slots", lang, icon=theme.deniedIcon, activity_name=activity_name),
                 ephemeral=True
             )
             return
@@ -1193,18 +1335,22 @@ class MinisterMenu(commands.Cog):
         user_data = self.users_cursor.fetchone()
         nickname = user_data[0] if user_data else f"ID: {fid}"
 
-        description = f"Choose an available time slot for **{nickname}** in {activity_name}:"
+        description = t(
+            "minister.menu.time_select_desc",
+            lang,
+            nickname=nickname,
+            activity_name=activity_name
+        )
         if current_time:
-            description += f"\n\n**Current booking:** `{current_time}`"
-            description += "\n\nSelecting a new time will move the booking."
+            description += t("minister.menu.time_select_current", lang, current_time=current_time)
 
         embed = discord.Embed(
-            title=f"{theme.timeIcon} Select Time for {nickname}",
+            title=t("minister.menu.time_select_title", lang, icon=theme.timeIcon, nickname=nickname),
             description=description,
             color=theme.emColor1
         )
 
-        view = TimeSelectView(self.bot, self, activity_name, fid, available_times, current_time)
+        view = TimeSelectView(self.bot, self, activity_name, fid, available_times, current_time, lang=lang)
 
         try:
             await interaction.response.edit_message(embed=embed, view=view)
@@ -1212,6 +1358,7 @@ class MinisterMenu(commands.Cog):
             await interaction.edit_original_response(embed=embed, view=view)
 
     async def complete_booking(self, interaction: discord.Interaction, activity_name: str, fid: str, selected_time: str):
+        lang = _get_lang(interaction)
         try:
             # Defer to prevent timeout
             if not interaction.response.is_done():
@@ -1246,7 +1393,13 @@ class MinisterMenu(commands.Cog):
                         )
                         self.svs_conn.commit()
                 
-                error_msg = f"The time {selected_time} for {activity_name} is already taken by {booked_nickname}"
+                error_msg = t(
+                    "minister.booking.taken",
+                    lang,
+                    time=selected_time,
+                    appointment_type=activity_name,
+                    nickname=booked_nickname
+                )
                 # Return to user selection with error in embed
                 await self.show_filtered_user_select_with_message(interaction, activity_name, error_msg, is_error=True)
                 return
@@ -1257,7 +1410,7 @@ class MinisterMenu(commands.Cog):
 
             if not user_data:
                 await interaction.response.send_message(
-                    f"{theme.deniedIcon} User {fid} is not registered.",
+                    t("minister.menu.user_not_registered", lang, icon=theme.deniedIcon, fid=fid),
                     ephemeral=True
                 )
                 return
@@ -1294,8 +1447,16 @@ class MinisterMenu(commands.Cog):
                 if existing_booking:
                     # This was a reschedule
                     embed = discord.Embed(
-                        title=f"Player rescheduled in {activity_name}",
-                        description=f"{nickname} ({fid}) from **{alliance_name}** moved from {old_time} to {selected_time}",
+                        title=t("minister.menu.rescheduled_title", lang, activity_name=activity_name),
+                        description=t(
+                            "minister.menu.rescheduled_desc",
+                            lang,
+                            nickname=nickname,
+                            fid=fid,
+                            alliance_name=alliance_name,
+                            old_time=old_time,
+                            new_time=selected_time
+                        ),
                         color=theme.emColor1
                     )
                     # Log reschedule
@@ -1312,8 +1473,15 @@ class MinisterMenu(commands.Cog):
                 else:
                     # This was a new booking
                     embed = discord.Embed(
-                        title=f"Player added to {activity_name}",
-                        description=f"{nickname} ({fid}) from **{alliance_name}** at {selected_time}",
+                        title=t("minister.embed.add_title", lang, appointment_type=activity_name),
+                        description=t(
+                            "minister.embed.add_description",
+                            lang,
+                            nickname=nickname,
+                            fid=fid,
+                            alliance_name=alliance_name,
+                            time=selected_time
+                        ),
                         color=theme.emColor3
                     )
                     # Log add
@@ -1328,20 +1496,35 @@ class MinisterMenu(commands.Cog):
                         alliance_name=alliance_name
                     )
                 embed.set_thumbnail(url=avatar_image)
-                embed.set_author(name=f"Added by {interaction.user.display_name}", icon_url=interaction.user.avatar.url if interaction.user.avatar else None)
+                embed.set_author(
+                    name=t("minister.embed.add_author", lang, user=interaction.user.display_name),
+                    icon_url=interaction.user.avatar.url if interaction.user.avatar else None
+                )
                 await minister_schedule_cog.send_embed_to_channel(embed)
                 await self.update_channel_message(activity_name)
 
             if existing_booking:
-                success_msg = f"Successfully moved {nickname} from {old_time} to {selected_time}"
+                success_msg = t(
+                    "minister.menu.rescheduled_success",
+                    lang,
+                    nickname=nickname,
+                    old_time=old_time,
+                    new_time=selected_time
+                )
             else:
-                success_msg = f"Successfully added {nickname} to {activity_name} at {selected_time}"
+                success_msg = t(
+                    "minister.menu.added_success",
+                    lang,
+                    nickname=nickname,
+                    activity_name=activity_name,
+                    time=selected_time
+                )
             
             await self.show_filtered_user_select_with_message(interaction, activity_name, success_msg)
 
         except Exception as e:
             try:
-                error_msg = f"{theme.deniedIcon} Error booking appointment: {e}"
+                error_msg = t("minister.menu.booking_error", lang, icon=theme.deniedIcon, error=str(e))
                 await interaction.followup.send(error_msg, ephemeral=True)
             except:
                 print(f"Failed to show error message for booking: {e}")
@@ -1361,15 +1544,16 @@ class MinisterMenu(commands.Cog):
             list_type = await minister_schedule_cog.get_channel_id("list type")
             if list_type == 3:
                 time_list, _ = minister_schedule_cog.generate_time_list(booked_times)
-                message_content = f"**{activity_name}** slots:\n" + "\n".join(time_list)
+                message_content = t("minister.list.slots", "en", appointment_type=activity_name) + "\n" + "\n".join(time_list)
             elif list_type == 2:
                 time_list = minister_schedule_cog.generate_booked_time_list(booked_times)
-                message_content = f"**{activity_name}** booked slots:\n" + "\n".join(time_list)
+                message_content = t("minister.list.booked", "en", appointment_type=activity_name) + "\n" + "\n".join(time_list)
             else:
                 time_list = minister_schedule_cog.generate_available_time_list(booked_times)
                 available_slots = len(time_list) > 0
-                message_content = f"**{activity_name}** available slots:\n" + "\n".join(
-                    time_list) if available_slots else f"All appointment slots are filled for {activity_name}"
+                message_content = (
+                    t("minister.list.available", "en", appointment_type=activity_name) + "\n" + "\n".join(time_list)
+                ) if available_slots else t("minister.list.full", "en", appointment_type=activity_name)
 
             context = f"{activity_name}"
             channel_context = f"{activity_name} channel"
@@ -1388,6 +1572,7 @@ class MinisterMenu(commands.Cog):
     
     async def clear_user_reservation(self, interaction: discord.Interaction, activity_name: str, fid: str, current_time: str):
         """Clear a user's reservation and return to the day management page"""
+        lang = _get_lang(interaction)
         try:
             # Defer to prevent timeout
             if not interaction.response.is_done():
@@ -1398,7 +1583,10 @@ class MinisterMenu(commands.Cog):
             user_data = self.users_cursor.fetchone()
             
             if not user_data:
-                await interaction.followup.send(f"{theme.deniedIcon} User not found.", ephemeral=True)
+                await interaction.followup.send(
+                    t("minister.menu.user_not_found", lang, icon=theme.deniedIcon),
+                    ephemeral=True
+                )
                 return
             
             nickname, alliance_id = user_data
@@ -1429,12 +1617,20 @@ class MinisterMenu(commands.Cog):
             minister_schedule_cog = self.bot.get_cog("MinisterSchedule")
             if minister_schedule_cog:
                 embed = discord.Embed(
-                    title=f"Player removed from {activity_name}",
-                    description=f"{nickname} ({fid}) from **{alliance_name}** at {current_time}",
+                    title=t("minister.embed.remove_title", lang, appointment_type=activity_name),
+                    description=t(
+                        "minister.menu.remove_desc",
+                        lang,
+                        nickname=nickname,
+                        fid=fid,
+                        alliance_name=alliance_name,
+                        time=current_time
+                    ),
                     color=theme.emColor2
                 )
                 embed.set_thumbnail(url=avatar_image)
-                embed.set_author(name=f"Removed by {interaction.user.display_name}",
+                embed.set_author(
+                               name=t("minister.embed.remove_author", lang, user=interaction.user.display_name),
                                icon_url=interaction.user.avatar.url if interaction.user.avatar else None)
                 await minister_schedule_cog.send_embed_to_channel(embed)
 
@@ -1453,12 +1649,17 @@ class MinisterMenu(commands.Cog):
                 await self.update_channel_message(activity_name)
             
             # Return to day management with confirmation
-            success_msg = f"Successfully cleared {nickname}'s reservation at {current_time}"
+            success_msg = t(
+                "minister.menu.clear_success",
+                lang,
+                nickname=nickname,
+                time=current_time
+            )
             await self.show_filtered_user_select_with_message(interaction, activity_name, success_msg)
             
         except Exception as e:
             try:
-                error_msg = f"{theme.deniedIcon} Error clearing reservation: {e}"
+                error_msg = t("minister.menu.clear_error", lang, icon=theme.deniedIcon, error=str(e))
                 await interaction.followup.send(error_msg, ephemeral=True)
             except:
                 print(f"Failed to show error message for clearing reservation: {e}")
@@ -1466,9 +1667,24 @@ class MinisterMenu(commands.Cog):
     async def show_clear_channels_selection(self, interaction: discord.Interaction):
         """Show channel selection menu for clearing configurations"""
         class ClearChannelsConfirmView(discord.ui.View):
-            def __init__(self, parent_cog):
+            def __init__(self, parent_cog, lang: str):
                 super().__init__(timeout=7200)
                 self.parent_cog = parent_cog
+                self.lang = lang
+
+                self.select_channels.placeholder = t("minister.menu.clear_channels_placeholder", lang)
+                for option in self.select_channels.options:
+                    if option.value == "Construction Day":
+                        option.label = t("minister.menu.channel.construction", lang)
+                    elif option.value == "Research Day":
+                        option.label = t("minister.menu.channel.research", lang)
+                    elif option.value == "Troops Training Day":
+                        option.label = t("minister.menu.channel.training", lang)
+                    elif option.value == "minister log":
+                        option.label = t("minister.menu.channel.log", lang)
+                    elif option.value == "ALL":
+                        option.label = t("minister.menu.channel.all", lang)
+                        option.description = t("minister.menu.channel.all_desc", lang)
                 
             @discord.ui.select(
                 placeholder="Select channels to clear...",
@@ -1485,6 +1701,7 @@ class MinisterMenu(commands.Cog):
             async def select_channels(self, interaction: discord.Interaction, select: discord.ui.Select):
                 try:
                     await interaction.response.defer()
+                    lang = _get_lang(interaction)
                     
                     cleared_channels = []
                     svs_conn = sqlite3.connect("db/svs.sqlite")
@@ -1512,27 +1729,29 @@ class MinisterMenu(commands.Cog):
                     svs_conn.close()
                     
                     # Show success message
-                    success_message = "Successfully cleared the following configurations:\n" + "\n".join([f"• {ch}" for ch in cleared_channels])
+                    success_message = t(
+                        "minister.menu.clear_channels_success",
+                        lang,
+                        channels="\n".join([f"• {ch}" for ch in cleared_channels])
+                    )
                     
                     # Return to settings menu with success message
                     embed = discord.Embed(
-                        title="⚙️ Minister Settings",
+                        title=t("minister.menu.settings_title", lang, icon=theme.settingsIcon),
                         description=(
-                            f"{theme.verifiedIcon} **{success_message}**\n\n"
-                            f"Administrative settings for minister scheduling:\n\n"
-                            f"Available Actions\n"
-                            f"{theme.upperDivider}\n\n"
-                            f"{theme.editListIcon} **Update Names**\n"
-                            f"└ Update nicknames from API for booked users\n\n"
-                            f"{theme.listIcon} **Schedule List Type**\n"
-                            f"└ Change the type of schedule list message when adding/removing people\n\n"
-                            f"📅 **Delete All Reservations**\n"
-                            f"└ Clear appointments for a specific day\n\n"
-                            f"{theme.announceIcon} **Clear Channels**\n"
-                            f"└ Clear channel configurations\n\n"
-                            f"{theme.fidIcon} **Delete Server ID**\n"
-                            f"└ Remove configured server from database\n\n"
-                            f"{theme.lowerDivider}"
+                            t(
+                                "minister.menu.settings_desc",
+                                lang,
+                                message=success_message,
+                                verified=theme.verifiedIcon,
+                                upper=theme.upperDivider,
+                                lower=theme.lowerDivider,
+                                edit_icon=theme.editListIcon,
+                                list_icon=theme.listIcon,
+                                calendar_icon=theme.calendarIcon,
+                                announce_icon=theme.announceIcon,
+                                fid_icon=theme.fidIcon
+                            )
                         ),
                         color=theme.emColor3
                     )
@@ -1545,7 +1764,10 @@ class MinisterMenu(commands.Cog):
                     )
 
                 except Exception as e:
-                    await interaction.followup.send(f"{theme.deniedIcon} Error clearing channels: {e}", ephemeral=True)
+                    await interaction.followup.send(
+                        t("minister.menu.clear_channels_error", _get_lang(interaction), icon=theme.deniedIcon, error=str(e)),
+                        ephemeral=True
+                    )
             
             async def _clear_channel_config(self, svs_cursor, activity_name, guild):
                 """Clear channel configuration and delete associated message - preserves appointment records"""
@@ -1582,35 +1804,33 @@ class MinisterMenu(commands.Cog):
                 await self.parent_cog.show_settings_menu(interaction)
         
         embed = discord.Embed(
-            title="🗑️ Clear Channel Configurations",
-            description="Select which channel configurations you want to clear.\n\n**Warning:** This will remove the channel configuration and delete any existing appointment messages in those channels.\n\n**Note:** Appointment records will be preserved.",
+            title=t("minister.menu.clear_channels_title", _get_lang(interaction)),
+            description=t("minister.menu.clear_channels_desc", _get_lang(interaction)),
             color=theme.emColor2
         )
         
-        await interaction.response.edit_message(embed=embed, view=ClearChannelsConfirmView(self))
+        await interaction.response.edit_message(
+            embed=embed,
+            view=ClearChannelsConfirmView(self, _get_lang(interaction))
+        )
     
     async def show_settings_menu(self, interaction: discord.Interaction):
         """Show the minister settings menu"""
         _, is_global, _ = await self.get_admin_permissions(interaction.user.id)
+        lang = _get_lang(interaction)
         embed = discord.Embed(
-            title=f"{theme.settingsIcon} Minister Settings",
-            description=(
-                f"Administrative settings for minister scheduling:\n\n"
-                f"Available Actions\n"
-                f"{theme.upperDivider}\n\n"
-                f"{theme.editListIcon} **Update Names**\n"
-                f"└ Update nicknames from API for booked users\n\n"
-                f"{theme.listIcon} **Schedule List Type**\n"
-                f"└ Change the type of schedule list message when adding/removing people\n\n"
-                f"{theme.timeIcon} **Time Slot Mode**\n"
-                f"└ Toggle between standard (00:00/00:30) and offset (00:00/00:15/00:45) time slots\n\n"
-                f"{theme.calendarIcon} **Delete All Reservations**\n"
-                f"└ Clear appointments for a specific day\n\n"
-                f"{theme.announceIcon} **Clear Channels**\n"
-                f"└ Clear channel configurations\n\n"
-                f"{theme.fidIcon} **Delete Server ID**\n"
-                f"└ Remove configured server from database\n\n"
-                f"{theme.lowerDivider}"
+            title=t("minister.menu.settings_title", lang, icon=theme.settingsIcon),
+            description=t(
+                "minister.menu.settings_desc_no_status",
+                lang,
+                upper=theme.upperDivider,
+                lower=theme.lowerDivider,
+                edit_icon=theme.editListIcon,
+                list_icon=theme.listIcon,
+                time_icon=theme.timeIcon,
+                calendar_icon=theme.calendarIcon,
+                announce_icon=theme.announceIcon,
+                fid_icon=theme.fidIcon
             ),
             color=theme.emColor1
         )
@@ -1624,13 +1844,14 @@ class MinisterMenu(commands.Cog):
     
     async def show_activity_selection_for_update(self, interaction: discord.Interaction):
         """Show activity selection for updating names"""
+        lang = _get_lang(interaction)
         embed = discord.Embed(
-            title=f"{theme.editListIcon} Update Names",
-            description="Select which activity day you want to update names for:",
+            title=t("minister.menu.update_names_title", lang, icon=theme.editListIcon),
+            description=t("minister.menu.update_names_desc", lang),
             color=theme.emColor1
         )
         
-        view = ActivitySelectView(self.bot, self, "update_names")
+        view = ActivitySelectView(self.bot, self, "update_names", lang=lang)
         
         try:
             await interaction.response.edit_message(embed=embed, view=view)
@@ -1639,10 +1860,11 @@ class MinisterMenu(commands.Cog):
     
     async def show_activity_selection_for_clear(self, interaction: discord.Interaction):
         """Show activity selection for clearing reservations"""
+        lang = _get_lang(interaction)
 
         minister_schedule_cog = self.bot.get_cog("MinisterSchedule")
         if not minister_schedule_cog:
-            await interaction.followup.send("Couldn't load minister_schedule.py cog")
+            await interaction.followup.send(t("minister.menu.schedule_load_failed", lang))
             return
 
         log_guild = await minister_schedule_cog.get_log_guild(interaction.guild)
@@ -1651,16 +1873,18 @@ class MinisterMenu(commands.Cog):
 
         if not log_channel:
             await interaction.response.send_message(
-                f"[Warning] Could not find a log channel. Log channel is needed before clearing the appointment \n\nRun the `/settings` command --> Other Features --> Minister Scheduling --> Channel Setup and choose a log channel", ephemeral=True)
+                t("minister.clear.log_channel_missing", lang),
+                ephemeral=True
+            )
             return
 
         embed = discord.Embed(
-            title="📅 Delete All Reservations",
-            description="Select which activity day you want to clear reservations for:",
+            title=t("minister.menu.clear_reservations_title", lang),
+            description=t("minister.menu.clear_reservations_desc", lang),
             color=theme.emColor2
         )
         
-        view = ActivitySelectView(self.bot, self, "clear_reservations")
+        view = ActivitySelectView(self.bot, self, "clear_reservations", lang=lang)
         
         try:
             await interaction.response.edit_message(embed=embed, view=view)
@@ -1669,6 +1893,7 @@ class MinisterMenu(commands.Cog):
 
     async def show_time_slot_mode_menu(self, interaction: discord.Interaction):
         """Show time slot mode selection menu"""
+        lang = _get_lang(interaction)
         self.svs_cursor.execute("SELECT context_id FROM reference WHERE context=?", ("slot_mode",))
         row = self.svs_cursor.fetchone()
         current_mode = int(row[0]) if row else 0
@@ -1680,18 +1905,12 @@ class MinisterMenu(commands.Cog):
         current_label = mode_labels[current_mode]
 
         embed = discord.Embed(
-            title=f"{theme.timeIcon} Time Slot Mode",
-            description=(
-                f"**Current Mode:** {current_label}\n\n"
-                "**Mode 0 (Standard):**\n"
-                "└ 48 slots: 00:00, 00:30, 01:00, 01:30... 23:30\n"
-                "└ Each slot is 30 minutes\n\n"
-                "**Mode 1 (Offset):**\n"
-                "└ 48 slots: 00:00 (15min), 00:15, 00:45, 01:15... 23:45 (15min to midnight)\n"
-                "└ First slot: 00:00-00:15 (15 min)\n"
-                "└ Middle slots: 30 min each\n"
-                "└ Last slot: 23:45-00:00 (15 min, ends at daily reset)\n\n"
-                f"{theme.warnIcon} **Warning:** Changing modes will automatically migrate all existing reservations to the new time slots."
+            title=t("minister.menu.slot_mode_title", lang, icon=theme.timeIcon),
+            description=t(
+                "minister.menu.slot_mode_desc",
+                lang,
+                current_label=current_label,
+                warn_icon=theme.warnIcon
             ),
             color=theme.emColor1
         )
@@ -1699,10 +1918,18 @@ class MinisterMenu(commands.Cog):
         view = discord.ui.View(timeout=60)
 
         select = discord.ui.Select(
-            placeholder="Choose a time slot mode:",
+            placeholder=t("minister.menu.slot_mode_placeholder", lang),
             options=[
-                discord.SelectOption(label="Standard", description="00:00, 00:30, 01:00... (30min slots)", value="0"),
-                discord.SelectOption(label="Offset", description="00:00, 00:15, 00:45... (offset 15min)", value="1")
+                discord.SelectOption(
+                    label=t("minister.menu.slot_mode_standard", lang),
+                    description=t("minister.menu.slot_mode_standard_desc", lang),
+                    value="0"
+                ),
+                discord.SelectOption(
+                    label=t("minister.menu.slot_mode_offset", lang),
+                    description=t("minister.menu.slot_mode_offset_desc", lang),
+                    value="1"
+                )
             ]
         )
 
@@ -1710,7 +1937,10 @@ class MinisterMenu(commands.Cog):
             new_mode = int(select.values[0])
 
             if new_mode == current_mode:
-                await interaction.response.send_message(f"{theme.infoIcon} Already using this mode.", ephemeral=True)
+                await interaction.response.send_message(
+                    t("minister.menu.slot_mode_already", lang, icon=theme.infoIcon),
+                    ephemeral=True
+                )
                 return
 
             # Migrate reservations
@@ -1734,6 +1964,7 @@ class MinisterMenu(commands.Cog):
 
     async def migrate_time_slots(self, interaction: discord.Interaction, old_mode: int, new_mode: int):
         """Migrate all reservations from old mode to new mode"""
+        lang = _get_lang(interaction)
         try:
             await interaction.response.defer()
 
@@ -1747,8 +1978,8 @@ class MinisterMenu(commands.Cog):
                 self.svs_conn.commit()
 
                 embed = discord.Embed(
-                    title=f"{theme.verifiedIcon} Time Slot Mode Updated",
-                    description=f"Successfully switched to **Mode {new_mode}** (no reservations to migrate).",
+                    title=t("minister.menu.slot_mode_updated_title", lang, icon=theme.verifiedIcon),
+                    description=t("minister.menu.slot_mode_updated_empty", lang, mode=new_mode),
                     color=theme.emColor3
                 )
                 await interaction.followup.send(embed=embed, ephemeral=True)
@@ -1780,11 +2011,12 @@ class MinisterMenu(commands.Cog):
                     migration_text += f"\n... and {len(migrations) - 20} more"
 
                 embed = discord.Embed(
-                    title=f"Time Slot Mode Changed: Mode {old_mode} → Mode {new_mode}",
-                    description=f"**Migrated {len(migrations)} reservations:**\n\n{migration_text}",
+                    title=t("minister.menu.slot_mode_changed_title", lang, old_mode=old_mode, new_mode=new_mode),
+                    description=t("minister.menu.slot_mode_changed_desc", lang, count=len(migrations), migration_text=migration_text),
                     color=discord.Color.orange()
                 )
-                embed.set_author(name=f"Changed by {interaction.user.display_name}",
+                embed.set_author(
+                               name=t("minister.menu.changed_by", lang, user=interaction.user.display_name),
                                icon_url=interaction.user.avatar.url if interaction.user.avatar else None)
                 await minister_schedule_cog.send_embed_to_channel(embed)
 
@@ -1814,15 +2046,23 @@ class MinisterMenu(commands.Cog):
             # Show success
             mode_labels = {0: "Standard", 1: "Offset"}
             embed = discord.Embed(
-                title=f"{theme.verifiedIcon} Time Slot Mode Updated",
-                description=f"Successfully switched to **{mode_labels[new_mode]}** mode.\n\n{len(migrations)} reservations were migrated.",
+                title=t("minister.menu.slot_mode_updated_title", lang, icon=theme.verifiedIcon),
+                description=t(
+                    "minister.menu.slot_mode_updated_desc",
+                    lang,
+                    mode_label=mode_labels[new_mode],
+                    count=len(migrations)
+                ),
                 color=theme.emColor3
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
             await self.show_settings_menu(interaction)
 
         except Exception as e:
-            await interaction.followup.send(f"{theme.deniedIcon} Error migrating time slots: {e}", ephemeral=True)
+            await interaction.followup.send(
+                t("minister.menu.slot_mode_error", lang, icon=theme.deniedIcon, error=str(e)),
+                ephemeral=True
+            )
 
     def convert_time_slot(self, time_str: str, old_mode: int, new_mode: int) -> str:
         """Convert a time slot from old mode to new mode"""
@@ -1853,6 +2093,7 @@ class MinisterMenu(commands.Cog):
 
     async def show_activity_selection_for_list_type(self, interaction: discord.Interaction):
         """Show activity selection for changing the list type"""
+        lang = _get_lang(interaction)
 
         self.svs_cursor.execute("SELECT context_id FROM reference WHERE context=?", ("list type",))
         row = self.svs_cursor.fetchone()
@@ -1862,19 +2103,31 @@ class MinisterMenu(commands.Cog):
         current_label = labels[current_value]
 
         embed = discord.Embed(
-            title="📋 Schedule List Type",
-            description=f"Select the type of generated minister list message when adding/removing people:\n\n**Currently showing:** {current_label}",
+            title=t("minister.menu.list_type_title", lang),
+            description=t("minister.menu.list_type_desc", lang, current_label=current_label),
             color=theme.emColor3
         )
 
         view = discord.ui.View(timeout=60)
 
         select = discord.ui.Select(
-            placeholder=f"Choose a schedule list type:",
+            placeholder=t("minister.menu.list_type_placeholder", lang),
             options=[
-                discord.SelectOption(label="Available", description="Show only available slots", value="1"),
-                discord.SelectOption(label="Booked", description="Show only booked slots", value="2"),
-                discord.SelectOption(label="All", description="Show all slots", value="3")
+                discord.SelectOption(
+                    label=t("minister.menu.list_type_available", lang),
+                    description=t("minister.menu.list_type_available_desc", lang),
+                    value="1"
+                ),
+                discord.SelectOption(
+                    label=t("minister.menu.list_type_booked", lang),
+                    description=t("minister.menu.list_type_booked_desc", lang),
+                    value="2"
+                ),
+                discord.SelectOption(
+                    label=t("minister.menu.list_type_all", lang),
+                    description=t("minister.menu.list_type_all_desc", lang),
+                    value="3"
+                )
             ]
         )
 
@@ -1887,8 +2140,13 @@ class MinisterMenu(commands.Cog):
             self.svs_conn.commit()
 
             updated_embed = discord.Embed(
-                title="📋 Schedule List Type",
-                description=f"{theme.verifiedIcon} Schedule list type updated successfully!\n\n**Now showing:** {labels[value]}\n\nNew changes will take effect when you add/remove a person to/from the minister schedule.",
+                title=t("minister.menu.list_type_title", lang),
+                description=t(
+                    "minister.menu.list_type_updated",
+                    lang,
+                    icon=theme.verifiedIcon,
+                    label=labels[value]
+                ),
                 color=theme.emColor3
             )
 

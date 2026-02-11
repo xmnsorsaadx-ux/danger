@@ -4,31 +4,48 @@ from discord import app_commands, ui
 import sqlite3
 import os
 from .pimp_my_bot import theme
+from i18n import get_guild_language, t
+
+
+def _get_lang(interaction: discord.Interaction | None) -> str:
+    guild_id = interaction.guild.id if interaction and interaction.guild else None
+    return get_guild_language(guild_id)
 
 class AllianceSelect(ui.Select):
-    def __init__(self, alliances):
+    def __init__(self, alliances, lang: str):
         options = [
             discord.SelectOption(label=name, value=str(alliance_id))
             for alliance_id, name in alliances
         ]
-        super().__init__(placeholder="Select Alliance", options=options)
+        super().__init__(
+            placeholder=t("db.transfer.select_alliance", lang),
+            options=options
+        )
 
 class AllianceView(ui.View):
-    def __init__(self, alliances):
+    def __init__(self, alliances, lang: str):
         super().__init__()
-        self.add_item(AllianceSelect(alliances))
+        self.add_item(AllianceSelect(alliances, lang))
 
 class DatabaseVersionSelect(ui.View):
-    def __init__(self):
+    def __init__(self, lang: str):
         super().__init__()
+        self.lang = lang
+        for item in self.children:
+            if not isinstance(item, discord.ui.Button):
+                continue
+            if item.custom_id == "v2_db":
+                item.label = t("db.transfer.button_v2", self.lang)
+            elif item.custom_id == "v3_db":
+                item.label = t("db.transfer.button_v3", self.lang)
 
-    @discord.ui.button(label="V2 Database", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="V2 Database", style=discord.ButtonStyle.primary, custom_id="v2_db")
     async def v2_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         cog = self.bot.get_cog('DatabaseTransfer')
         await interaction.response.defer(ephemeral=True)
         await cog.transfer_v2_database(interaction)
 
-    @discord.ui.button(label="V3 Database", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="V3 Database", style=discord.ButtonStyle.primary, custom_id="v3_db")
     async def v3_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         cog = self.bot.get_cog('DatabaseTransfer')
         await interaction.response.defer(ephemeral=True)
@@ -39,12 +56,13 @@ class DatabaseTransfer(commands.Cog):
         self.bot = bot
 
     async def transfer_old_database(self, interaction: discord.Interaction):
+        lang = _get_lang(interaction)
         warning_embed = discord.Embed(
-            title="Warning",
-            description="Please do not mix V2 and V3 databases!\nMake sure to place the database you want to transfer in the same folder as main.py and ensure its name is gift_db.sqlite.",
+            title=t("db.transfer.warning_title", lang),
+            description=t("db.transfer.warning_body", lang),
             color=discord.Color.yellow()
         )
-        view = DatabaseVersionSelect()
+        view = DatabaseVersionSelect(lang)
         view.bot = self.bot
         await interaction.response.send_message(embeds=[warning_embed], view=view, ephemeral=True)
 
@@ -57,14 +75,23 @@ class DatabaseTransfer(commands.Cog):
         return alliances
 
     async def olddatabase(self, interaction: discord.Interaction):
-        embed = discord.Embed(title="Database Transfer", color=discord.Color.orange())
+        lang = _get_lang(interaction)
+        embed = discord.Embed(title=t("db.transfer.title", lang), color=discord.Color.orange())
 
         if not os.path.exists('gift_db.sqlite'):
-            embed.add_field(name="Status", value="gift_db.sqlite not found.", inline=False)
+            embed.add_field(
+                name=t("db.transfer.status_label", lang),
+                value=t("db.transfer.status_missing", lang),
+                inline=False
+            )
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
 
-        embed.add_field(name="Status", value="Database transfer in progress...", inline=False)
+        embed.add_field(
+            name=t("db.transfer.status_label", lang),
+            value=t("db.transfer.status_in_progress", lang),
+            inline=False
+        )
         message = await interaction.followup.send(embed=embed, ephemeral=True)
 
         transfer_steps = [
@@ -129,23 +156,36 @@ class DatabaseTransfer(commands.Cog):
                         reorganized_rows.append(reorganized_row)
                     destination_cursor.executemany("INSERT OR REPLACE INTO users (fid, nickname, furnace_lv, kid, stove_lv_content, alliance) VALUES (?, ?, ?, ?, ?, ?)", reorganized_rows)
 
-                embed.add_field(name=f"Step {table}", value=f"Transferred {row_count} rows ✔", inline=False)
+                embed.add_field(
+                    name=t("db.transfer.step_label", lang, table=table),
+                    value=t("db.transfer.step_value", lang, count=row_count),
+                    inline=False
+                )
                 await message.edit(embed=embed)
                 destination_conn.commit()
 
             except Exception as e:
-                embed.add_field(name=f"Error at {table}", value=f"{str(e)}", inline=False)
+                embed.add_field(
+                    name=t("db.transfer.step_error", lang, table=table),
+                    value=str(e),
+                    inline=False
+                )
                 await message.edit(embed=embed)
             
         for conn in db_connections.values():
             conn.close()
 
         embed.color = discord.Color.green()
-        embed.add_field(name="Status", value="All database transfers completed successfully!", inline=False)
+        embed.add_field(
+            name=t("db.transfer.status_label", lang),
+            value=t("db.transfer.status_done", lang),
+            inline=False
+        )
         await message.edit(embed=embed)
 
     async def transfer_v2_data(self, interaction: discord.Interaction, alliance_id: int):
-        embed = discord.Embed(title="Database Transfer (V2)", color=discord.Color.orange())
+        lang = _get_lang(interaction)
+        embed = discord.Embed(title=t("db.transfer.title_v2", lang), color=discord.Color.orange())
         message = await interaction.followup.send(embed=embed, ephemeral=True)
 
         transfer_steps = [
@@ -194,39 +234,52 @@ class DatabaseTransfer(commands.Cog):
                     elif table == "user_giftcodes":
                         destination_cursor.executemany("INSERT OR REPLACE INTO user_giftcodes (fid, giftcode, status) VALUES (?, ?, ?)", rows)
 
-                embed.add_field(name=f"Step {table}", value=f"Transferred {row_count} rows ✔", inline=False)
+                embed.add_field(
+                    name=t("db.transfer.step_label", lang, table=table),
+                    value=t("db.transfer.step_value", lang, count=row_count),
+                    inline=False
+                )
                 await message.edit(embed=embed)
                 destination_conn.commit()
 
             except Exception as e:
-                embed.add_field(name=f"Error at {table}", value=f"{str(e)}", inline=False)
+                embed.add_field(
+                    name=t("db.transfer.step_error", lang, table=table),
+                    value=str(e),
+                    inline=False
+                )
                 await message.edit(embed=embed)
             
         for conn in db_connections.values():
             conn.close()
 
         embed.color = discord.Color.green()
-        embed.add_field(name="Status", value="All database transfers completed successfully!", inline=False)
+        embed.add_field(
+            name=t("db.transfer.status_label", lang),
+            value=t("db.transfer.status_done", lang),
+            inline=False
+        )
         await message.edit(embed=embed)
 
     async def transfer_v2_database(self, interaction: discord.Interaction):
+        lang = _get_lang(interaction)
         alliances = await self.check_alliances()
         
         if not alliances:
             embed = discord.Embed(
-                title="Database Transfer (V2)",
-                description="Please create an alliance before transferring the database!",
+                title=t("db.transfer.title_v2", lang),
+                description=t("db.transfer.no_alliances", lang),
                 color=discord.Color.red()
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
 
         embed = discord.Embed(
-            title="Database Transfer (V2)",
-            description="Please select the alliance to transfer users to:",
+            title=t("db.transfer.title_v2", lang),
+            description=t("db.transfer.select_alliance_prompt", lang),
             color=theme.emColor1
         )
-        view = AllianceView(alliances)
+        view = AllianceView(alliances, lang)
         
         async def alliance_callback(interaction: discord.Interaction):
             await interaction.response.defer(ephemeral=True)
