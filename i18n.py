@@ -46,6 +46,70 @@ MESSAGES: Dict[str, Dict[str, str]] = {
         "en": "Manage alliances and settings",
         "ar": "ادارة التحالفات والاعدادات",
     },
+    "alliance.operations.title": {
+        "en": "Alliance Operations",
+        "ar": "عمليات التحالف",
+    },
+    "alliance.operations.prompt": {
+        "en": "Please select an operation:",
+        "ar": "يرجى اختيار العملية:",
+    },
+    "alliance.operations.available": {
+        "en": "Available Operations",
+        "ar": "العمليات المتاحة",
+    },
+    "alliance.operations.add": {
+        "en": "Add Alliance",
+        "ar": "إضافة تحالف",
+    },
+    "alliance.operations.add_desc": {
+        "en": "Create a new alliance",
+        "ar": "إنشاء تحالف جديد",
+    },
+    "alliance.operations.edit": {
+        "en": "Edit Alliance",
+        "ar": "تعديل تحالف",
+    },
+    "alliance.operations.edit_desc": {
+        "en": "Modify existing alliance settings",
+        "ar": "تعديل اعدادات التحالف الموجود",
+    },
+    "alliance.operations.delete": {
+        "en": "Delete Alliance",
+        "ar": "حذف تحالف",
+    },
+    "alliance.operations.delete_desc": {
+        "en": "Remove an existing alliance",
+        "ar": "إزالة تحالف موجود",
+    },
+    "alliance.operations.view": {
+        "en": "View Alliances",
+        "ar": "عرض التحالفات",
+    },
+    "alliance.operations.view_desc": {
+        "en": "List all available alliances",
+        "ar": "عرض جميع التحالفات المتاحة",
+    },
+    "alliance.operations.check": {
+        "en": "Check Alliance",
+        "ar": "فحص تحالف",
+    },
+    "alliance.operations.check_desc": {
+        "en": "Check alliance status",
+        "ar": "فحص حالة التحالف",
+    },
+    "common.main_menu": {
+        "en": "Main Menu",
+        "ar": "القائمة الرئيسية",
+    },
+    "common.confirm": {
+        "en": "Confirm",
+        "ar": "تأكيد",
+    },
+    "common.cancel": {
+        "en": "Cancel",
+        "ar": "إلغاء",
+    },
     "menu.settings.member_ops": {
         "en": "Alliance Member Operations",
         "ar": "عمليات اعضاء التحالف",

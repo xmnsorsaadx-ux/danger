@@ -398,20 +398,21 @@ class Alliance(commands.Cog):
 
             try:
                 if custom_id == "alliance_operations":
+                    lang = get_guild_language(interaction.guild.id if interaction.guild else None)
                     embed = discord.Embed(
-                        title=f"{theme.allianceIcon} Alliance Operations",
+                        title=f"{theme.allianceIcon} {t('alliance.operations.title', lang)}",
                         description=(
-                            f"Please select an operation:\n\n"
-                            f"**Available Operations**\n"
+                            f"{t('alliance.operations.prompt', lang)}\n\n"
+                            f"**{t('alliance.operations.available', lang)}**\n"
                             f"{theme.upperDivider}\n"
-                            f"{theme.addIcon} **Add Alliance**\n"
-                            f"└ Create a new alliance\n\n"
-                            f"{theme.editListIcon} **Edit Alliance**\n"
-                            f"└ Modify existing alliance settings\n\n"
-                            f"{theme.trashIcon} **Delete Alliance**\n"
-                            f"└ Remove an existing alliance\n\n"
-                            f"{theme.eyesIcon} **View Alliances**\n"
-                            f"└ List all available alliances\n"
+                            f"{theme.addIcon} **{t('alliance.operations.add', lang)}**\n"
+                            f"└ {t('alliance.operations.add_desc', lang)}\n\n"
+                            f"{theme.editListIcon} **{t('alliance.operations.edit', lang)}**\n"
+                            f"└ {t('alliance.operations.edit_desc', lang)}\n\n"
+                            f"{theme.trashIcon} **{t('alliance.operations.delete', lang)}**\n"
+                            f"└ {t('alliance.operations.delete_desc', lang)}\n\n"
+                            f"{theme.eyesIcon} **{t('alliance.operations.view', lang)}**\n"
+                            f"└ {t('alliance.operations.view_desc', lang)}\n"
                             f"{theme.lowerDivider}"
                         ),
                         color=theme.emColor1
@@ -421,37 +422,37 @@ class Alliance(commands.Cog):
                     # Server admins are scoped to their server's alliances in the handlers
                     view = discord.ui.View()
                     view.add_item(discord.ui.Button(
-                        label="Add Alliance",
+                        label=t('alliance.operations.add', lang),
                         emoji=theme.addIcon,
                         style=discord.ButtonStyle.success,
                         custom_id="add_alliance"
                     ))
                     view.add_item(discord.ui.Button(
-                        label="Edit Alliance",
+                        label=t('alliance.operations.edit', lang),
                         emoji=theme.editListIcon,
                         style=discord.ButtonStyle.primary,
                         custom_id="edit_alliance"
                     ))
                     view.add_item(discord.ui.Button(
-                        label="Delete Alliance",
+                        label=t('alliance.operations.delete', lang),
                         emoji=theme.trashIcon,
                         style=discord.ButtonStyle.danger,
                         custom_id="delete_alliance"
                     ))
                     view.add_item(discord.ui.Button(
-                        label="View Alliances",
+                        label=t('alliance.operations.view', lang),
                         emoji=theme.eyesIcon,
                         style=discord.ButtonStyle.primary,
                         custom_id="view_alliances"
                     ))
                     view.add_item(discord.ui.Button(
-                        label="Check Alliance", 
+                        label=t('alliance.operations.check', lang), 
                         emoji=theme.searchIcon,
                         style=discord.ButtonStyle.primary, 
                         custom_id="check_alliance"
                     ))
                     view.add_item(discord.ui.Button(
-                        label="Main Menu", 
+                        label=t('common.main_menu', lang), 
                         emoji=theme.homeIcon,
                         style=discord.ButtonStyle.secondary, 
                         custom_id="main_menu"
@@ -1281,6 +1282,7 @@ class Alliance(commands.Cog):
 
     async def alliance_delete_callback(self, interaction: discord.Interaction):
         try:
+            lang = get_guild_language(interaction.guild.id if interaction.guild else None)
             alliance_id = int(interaction.data["values"][0])
             
             self.c.execute("SELECT name FROM alliance_list WHERE alliance_id = ?", (alliance_id,))
@@ -1406,8 +1408,8 @@ class Alliance(commands.Cog):
                 )
                 await button_interaction.response.edit_message(embed=cancel_embed, view=None)
 
-            confirm_button = discord.ui.Button(label="Confirm", style=discord.ButtonStyle.danger)
-            cancel_button = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.grey)
+            confirm_button = discord.ui.Button(label=t('common.confirm', lang), style=discord.ButtonStyle.danger)
+            cancel_button = discord.ui.Button(label=t('common.cancel', lang), style=discord.ButtonStyle.grey)
             confirm_button.callback = confirm_callback
             cancel_button.callback = cancel_callback
             confirm_view.add_item(confirm_button)
